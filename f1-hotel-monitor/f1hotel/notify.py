@@ -57,7 +57,8 @@ def format_offer(o: Offer, s: Score) -> str:
         f"{s.label} {o.hotel_name}",
         f"  [{o.party}] {o.area_label} tier{o.tier} / {stay}",
         f"  {o.room_name or '-'} / {o.plan_name[:50]}",
-        f"  合計 {fmt_yen(o.total_price)}（{fmt_yen(o.price_per_night)}/泊）",
+        f"  合計 {'≈' if o.extra.get('price_basis') == 'estimated' else ''}{fmt_yen(o.total_price)}"
+        f"（{fmt_yen(o.price_per_night)}/泊）",
     ]
     if o.url:
         lines.append(f"  {o.url}")

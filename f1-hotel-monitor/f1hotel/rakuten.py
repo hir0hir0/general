@@ -340,14 +340,27 @@ def parse_vacant_response(data: dict[str, Any], stay: Stay, target: SearchTarget
                     charges.append(item["dailyCharge"])
             if not rb:
                 continue
+            # dailyCharge.total は「その日 1 泊・1 室あたりの合計」。
+            # API は初日分しか返さないことが多いので、その場合は 1 泊単価 × 泊数 で概算する。
+            day_totals: list[int] = []
+            for c in charges:
+                v = c.get("total")
+                if v in (None, "", 0):
+                    v = c.get("rakutenCharge") or 0
+                try:
+                    day_totals.append(int(v))
+                except (TypeError, ValueError):
+                    continue
+            day_totals = [v for v in day_totals if v > 0]
             total: int | None = None
-            if charges:
-                last = charges[-1]
-                if last.get("total") not in (None, "", 0):
-                    total = int(last["total"])
-                else:
-                    per_night = [int(c.get("rakutenCharge") or 0) for c in charges]
-                    total = sum(per_night) * party.rooms if per_night else None
+            basis = "none"
+            if len(day_totals) >= stay.nights:
+                total = sum(day_totals[: stay.nights]) * party.rooms
+                basis = "daily_sum"
+            elif day_totals:
+                per_night = sum(day_totals) / len(day_totals)
+                total = int(round(per_night * stay.nights)) * party.rooms
+                basis = "estimated"
             offers.append(
                 Offer(
                     source="rakuten",
@@ -368,6 +381,8 @@ def parse_vacant_response(data: dict[str, Any], stay: Stay, target: SearchTarget
                     plan_text=str(rb.get("planContents", "")),
                     hotel_text=hotel_text,
                     extra={
+                        "price_basis": basis,  # daily_sum=日別合算 / estimated=初日単価×泊数
+                        "daily_charges": len(day_totals),
                         "breakfast": bool(rb.get("withBreakfastFlag")),
                         "review": basic.get("reviewAverage"),
                         "fetched_at": fetched,
@@ -430,5 +445,9 @@ def fetch_rakuten(
                 if page >= int(paging.get("pageCount", 1)):
                     break
                 page += 1
-    log.info("rakuten: %d offers, %d requests", len(result.offers), client.request_count)
+    bases = {}
+    for o in result.offers:
+        b = o.extra.get("price_basis", "?")
+        bases[b] = bases.get(b, 0) + 1
+    log.info("rakuten: %d offers, %d requests, 料金の根拠 %s", len(result.offers), client.request_count, bases)
     return result

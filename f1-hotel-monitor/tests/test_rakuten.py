@@ -190,7 +190,7 @@ def test_build_vacant_params_four_people_two_rooms(cfg):
     assert p["adultNum"] == 3 and p["roomNum"] == 2 and p["infantWithoutMBNum"] == 1
 
 
-def vacant_payload(hotel_no=1234, total=36000, page=1, page_count=1):
+def vacant_payload(hotel_no=1234, total=18000, page=1, page_count=1):
     return {
         "pagingInfo": {"recordCount": 1, "pageCount": page_count, "page": page, "first": 1, "last": 1},
         "hotels": [
@@ -223,6 +223,7 @@ def vacant_payload(hotel_no=1234, total=36000, page=1, page_count=1):
                             },
                             {"dailyCharge": {"stayDate": "2027-04-09", "rakutenCharge": 18000, "total": 18000, "chargeFlag": 0}},
                             {"dailyCharge": {"stayDate": "2027-04-10", "rakutenCharge": 18000, "total": total, "chargeFlag": 0}},
+
                         ]
                     },
                     {
@@ -245,11 +246,13 @@ def test_parse_vacant_response():
     offers = parse_vacant_response(vacant_payload(), stay, t, party)
     assert len(offers) == 2
     o = offers[0]
+    # 日別 2 件（18,000 + 18,000）を合算
     assert o.hotel_id == "1234" and o.plan_id == "555:twn" and o.total_price == 36000 and o.price_per_night == 18000
+    assert o.extra["price_basis"] == "daily_sum"
     assert o.url.endswith("/reserve/1234") and o.tier == 1 and "鈴鹿・白子" in o.area_label
     assert o.key == "rakuten:1234:555:twn:親子2人1室:2027-04-09:2027-04-11"
     assert o.party == "親子2人1室"
-    # total が 0 の場合は rakutenCharge の合計にフォールバック
+    # total が 0 の場合は rakutenCharge にフォールバックして合算
     assert offers[1].total_price == 24000 and offers[1].url.endswith("/plan/1234")
     assert offers[1].extra["breakfast"] is True
 
@@ -335,6 +338,28 @@ def test_fetch_rakuten_covers_every_party(cfg):
     assert {o.party for o in res.offers} == {"親子2人1室", "4人1室", "4人2室"}
     assert [(p["adultNum"], p["roomNum"]) for _, p in sess.calls] == [(1, 1), (3, 1), (3, 2)]
     assert len(res.offers) == 6  # 3 パターン × 2 プラン
+
+
+def test_price_estimated_when_api_returns_only_checkin_day(cfg):
+    """楽天は初日分の dailyCharge しか返さないことがある → 単価 × 泊数で概算する。"""
+    payload = vacant_payload()
+    rooms = payload["hotels"][0]["hotel"][2]["roomInfo"]
+    payload["hotels"][0]["hotel"][2]["roomInfo"] = rooms[:2]  # dailyCharge を 1 件に減らす
+    stay3 = Stay(dt.date(2027, 4, 9), dt.date(2027, 4, 12))
+    t = SearchTarget(1, "鈴鹿", "mie", "tsu", None, "津")
+    one_room = parse_vacant_response(payload, stay3, t, cfg.parties[1])   # 4人1室
+    assert one_room[0].total_price == 18000 * 3  # 初日 18,000 × 3泊
+    assert one_room[0].extra["price_basis"] == "estimated"
+    two_rooms = parse_vacant_response(payload, stay3, t, cfg.parties[2])  # 4人2室
+    assert two_rooms[0].total_price == 18000 * 3 * 2  # 部屋数ぶん倍にする
+
+
+def test_price_scales_with_room_count(cfg):
+    stay = Stay(dt.date(2027, 4, 9), dt.date(2027, 4, 11))
+    t = SearchTarget(1, "鈴鹿", "mie", "kuwana", "A", "鈴鹿・白子")
+    one = parse_vacant_response(vacant_payload(), stay, t, cfg.parties[1])
+    two = parse_vacant_response(vacant_payload(), stay, t, cfg.parties[2])
+    assert two[0].total_price == one[0].total_price * 2
 
 
 def test_area_cache(tmp_path):

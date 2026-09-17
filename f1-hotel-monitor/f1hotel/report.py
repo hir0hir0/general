@@ -42,6 +42,13 @@ def render_table(rows: list[list[str]], headers: list[str], right_cols: set[int]
     return "\n".join([line, sep, *body])
 
 
+def _price(v: int | None, offer: Offer) -> str:
+    if v is None:
+        return "-"
+    prefix = "≈" if offer.extra.get("price_basis") == "estimated" else ""
+    return f"{prefix}{v:,}"
+
+
 def offers_table(offers: Iterable[Offer], cfg: Config, max_plan: int = 34) -> str:
     scored = [(o, score_offer(o, cfg.scoring, cfg.threshold_for(o))) for o in offers]
     scored.sort(key=lambda t: (t[0].party, *sort_key(*t)))
@@ -59,8 +66,8 @@ def offers_table(offers: Iterable[Offer], cfg: Config, max_plan: int = 34) -> st
                 _cut(o.hotel_name, 26),
                 f"{o.checkin[5:].replace('-', '/')}-{o.checkout[8:]}",
                 _cut(f"{o.room_name} {o.plan_name}".strip(), max_plan),
-                f"{o.total_price:,}" if o.total_price is not None else "-",
-                f"{o.price_per_night:,}" if o.price_per_night is not None else "-",
+                _price(o.total_price, o),
+                _price(o.price_per_night, o),
                 ",".join(s.bonuses),
             ]
         )
