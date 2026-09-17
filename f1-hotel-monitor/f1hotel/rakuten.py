@@ -130,40 +130,65 @@ class MiddleClass:
     smalls: list[SmallClass] = field(default_factory=list)
 
 
-def _iter_classes(container: Iterable[Any], key: str):
-    """GetAreaClass の入れ子（[info, {children}] 形式 or dict 形式）を吸収して走査する。"""
-    for wrapper in container or []:
-        node = wrapper.get(key) if isinstance(wrapper, dict) else None
-        if node is None:
-            continue
-        if isinstance(node, dict):
-            yield node, {}
-            continue
-        info: dict[str, Any] = {}
-        children: dict[str, Any] = {}
-        for part in node:
-            if not isinstance(part, dict):
-                continue
-            if any(k.endswith("Code") for k in part):
-                info.update(part)
-            else:
-                children.update(part)
-        yield info, children
+def _collect_classes(node: Any, level: str) -> list[tuple[dict[str, Any], Any]]:
+    """JSON のどこにあっても level のクラス要素を拾う（ラッパー構造の違いを吸収）。
+
+    戻り値は (info, container)。info は Code/Name を含む dict、container は
+    その要素の入れ子（下位クラスを探す対象）。
+    """
+    code_key = f"{level}ClassCode"
+    out: list[tuple[dict[str, Any], Any]] = []
+    if isinstance(node, dict):
+        if code_key in node:
+            return [(node, node)]
+        for v in node.values():
+            out.extend(_collect_classes(v, level))
+    elif isinstance(node, list):
+        merged: dict[str, Any] = {}
+        for item in node:
+            if isinstance(item, dict) and code_key in item:
+                merged.update(item)
+        if merged:
+            return [(merged, node)]
+        for item in node:
+            out.extend(_collect_classes(item, level))
+    return out
 
 
 def parse_area_tree(raw: dict[str, Any]) -> list[MiddleClass]:
     out: list[MiddleClass] = []
-    larges = raw.get("areaClasses", {}).get("largeClasses", [])
-    for _linfo, lch in _iter_classes(larges, "largeClass"):
-        for minfo, mch in _iter_classes(lch.get("middleClasses", []), "middleClass"):
-            mid = MiddleClass(minfo.get("middleClassCode", ""), minfo.get("middleClassName", ""))
-            for sinfo, sch in _iter_classes(mch.get("smallClasses", []), "smallClass"):
-                small = SmallClass(sinfo.get("smallClassCode", ""), sinfo.get("smallClassName", ""))
-                for dinfo, _ in _iter_classes(sch.get("detailClasses", []), "detailClass"):
-                    small.details.append((dinfo.get("detailClassCode", ""), dinfo.get("detailClassName", "")))
-                mid.smalls.append(small)
-            out.append(mid)
+    seen: set[str] = set()
+    for minfo, mnode in _collect_classes(raw, "middle"):
+        code = str(minfo.get("middleClassCode", ""))
+        if not code or code in seen:
+            continue
+        seen.add(code)
+        mid = MiddleClass(code, str(minfo.get("middleClassName", "")))
+        small_seen: set[str] = set()
+        for sinfo, snode in _collect_classes(mnode, "small"):
+            scode = str(sinfo.get("smallClassCode", ""))
+            if not scode or scode in small_seen:
+                continue
+            small_seen.add(scode)
+            small = SmallClass(scode, str(sinfo.get("smallClassName", "")))
+            detail_seen: set[str] = set()
+            for dinfo, _ in _collect_classes(snode, "detail"):
+                dcode = str(dinfo.get("detailClassCode", ""))
+                if dcode and dcode not in detail_seen:
+                    detail_seen.add(dcode)
+                    small.details.append((dcode, str(dinfo.get("detailClassName", ""))))
+            mid.smalls.append(small)
+        out.append(mid)
     return out
+
+
+def describe_tree(tree: list[MiddleClass], limit: int = 12) -> str:
+    """解析結果の要約（設定が合わないときの診断用）。"""
+    if not tree:
+        return "エリア一覧を解析できませんでした（0 件）"
+    items = [f"{m.code}({m.name},{len(m.smalls)}地区)" for m in tree[:limit]]
+    more = f" …他 {len(tree) - limit}" if len(tree) > limit else ""
+    return f"解析できた都道府県 {len(tree)} 件: " + ", ".join(items) + more
 
 
 def load_area_tree(client: RakutenClient | None, cache_path: Path, force: bool = False) -> list[MiddleClass]:

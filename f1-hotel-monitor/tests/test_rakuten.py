@@ -10,6 +10,7 @@ from f1hotel.rakuten import (
     RakutenError,
     SearchTarget,
     build_vacant_params,
+    describe_tree,
     fetch_rakuten,
     load_area_tree,
     parse_area_tree,
@@ -87,6 +88,43 @@ def test_parse_area_tree():
     assert [s.code for s in mie.smalls] == ["kuwana", "tsu", "iga"]
     assert mie.smalls[0].details[0] == ("A", "鈴鹿・白子")
     assert mie.smalls[1].details == []
+
+
+def test_parse_area_tree_alternative_structures():
+    """ラッパーが変わっても（dict 形式・余分な入れ子）解析できること。"""
+    flat = {
+        "result": {
+            "areaClasses": {
+                "largeClasses": [
+                    {
+                        "largeClassCode": "japan",
+                        "middleClasses": [
+                            {
+                                "middleClassCode": "mie",
+                                "middleClassName": "三重県",
+                                "smallClasses": [
+                                    {
+                                        "smallClassCode": "kuwana",
+                                        "smallClassName": "桑名・四日市",
+                                        "detailClasses": [
+                                            {"detailClassCode": "A", "detailClassName": "鈴鹿・白子"},
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+    tree = parse_area_tree(flat)
+    assert [m.code for m in tree] == ["mie"]
+    assert tree[0].smalls[0].code == "kuwana"
+    assert tree[0].smalls[0].details == [("A", "鈴鹿・白子")]
+    assert parse_area_tree({}) == []
+    assert "0 件" in describe_tree([])
+    assert "mie" in describe_tree(tree)
 
 
 def test_resolve_targets_detail_split_and_tier_dedupe():

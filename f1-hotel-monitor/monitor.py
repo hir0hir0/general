@@ -30,7 +30,14 @@ from f1hotel.notify import (
     mark_reminder_sent,
     should_notify_error,
 )
-from f1hotel.rakuten import RakutenClient, RakutenError, fetch_rakuten, load_area_tree, resolve_targets
+from f1hotel.rakuten import (
+    RakutenClient,
+    RakutenError,
+    describe_tree,
+    fetch_rakuten,
+    load_area_tree,
+    resolve_targets,
+)
 from f1hotel.report import offers_table, summary_line
 from f1hotel.state import append_history, compute_diff, load_state, merge_for_save, save_state
 from f1hotel.toyoko import fetch_toyoko
@@ -63,7 +70,16 @@ def collect(cfg: Config, sources: list[str]) -> list[SourceResult]:
             for w in warns:
                 log.warning("rakuten area: %s", w)
             if not targets:
-                results.append(SourceResult("rakuten", [], ["検索対象エリアが 0 件（config.toml の keywords を `areas` で確認）"]))
+                msg = "検索対象エリアが 0 件。" + describe_tree(tree)
+                if not tree:
+                    cache = cfg.data_dir / "rakuten_areas.json"
+                    try:
+                        msg += " 応答の冒頭: " + cache.read_text(encoding="utf-8")[:300]
+                    except OSError:
+                        pass
+                elif warns:
+                    msg += " / " + " / ".join(warns[:3])
+                results.append(SourceResult("rakuten", [], [msg]))
             else:
                 log.info("rakuten: %d targets × %d stays", len(targets), len(cfg.stays))
                 results.append(fetch_rakuten(cfg, client, targets))
@@ -148,6 +164,7 @@ def cmd_run(args: argparse.Namespace, cfg: Config) -> int:
 def cmd_areas(args: argparse.Namespace, cfg: Config) -> int:
     client = RakutenClient(cfg.rakuten_app_id or "", cfg.rakuten_access_key or "") if cfg.rakuten_app_id else None
     tree = load_area_tree(client, cfg.data_dir / "rakuten_areas.json", force=args.refresh)
+    print(describe_tree(tree, limit=60))
     middles = [m for m in tree if not args.middle or m.code == args.middle]
     if not middles:
         print(f"middleClassCode '{args.middle}' なし。候補: {', '.join(m.code for m in tree)}")
