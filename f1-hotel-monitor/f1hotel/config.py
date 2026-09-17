@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import datetime as dt
 import os
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+
+try:
+    import tomllib
+except ImportError:  # Python < 3.11（Synology 公式 Python 3.9 など）
+    import tomli as tomllib  # type: ignore[no-redef]
 
 from .models import Stay
 

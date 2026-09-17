@@ -92,6 +92,28 @@ QuickConnect で DSM に入り、Container Manager の「プロジェクト」�
 コンテナの「ターミナル」タブから `python /app/monitor.py --config /data/config.toml areas --middle mie`
 のように手動コマンドも実行できる。
 
+### B-2. DSM 7.1 の「Docker」パッケージで導入（DS418play など、Container Manager が出ない DSM 7.1 機）
+
+DSM 7.1 ではパッケージ名が **Docker**（7.2 から Container Manager）。プロジェクト（compose 貼り付け）機能がないので GUI で 1 コンテナ作る。
+DSM 7.2 に更新できる機種なら、更新して上の B の手順にするほうが簡単。
+
+1. パッケージセンターで「Docker」を検索してインストール
+2. Docker > レジストリ で `mcr.microsoft.com/playwright/python` を検索し、タグ **v1.63.0-noble** をダウンロード
+3. Docker > イメージ でそのイメージを選び「起動」
+   - コンテナ名: `f1-hotel-monitor`、「自動再起動を有効にする」に✓
+   - **詳細設定 > 環境**: 次を追加
+     - `TZ` = `Asia/Tokyo`
+     - `F1HOTEL_BRANCH` = `main`（未マージの間は `claude/quirky-ride-2rg4ew`）
+     - `RAKUTEN_APP_ID` = 楽天の applicationId
+     - `NOTIFY_CHANNELS` = `ntfy`
+     - `NTFY_TOPIC` = ntfy のトピック名
+   - **詳細設定 > 実行コマンド**（「実行コマンド」欄）:
+     `bash -c "curl -fsSL https://raw.githubusercontent.com/hir0hir0/general/${F1HOTEL_BRANCH}/f1-hotel-monitor/deploy/container-boot.sh | bash"`
+   - **ボリューム**: File Station で `docker/f1-hotel-monitor/data` フォルダを作り、マウントパス `/data` に追加
+   - ポート・ネットワークは既定のまま
+4. 起動後、コンテナの「詳細 > ログ」に `[boot] fetching branch` と空室の表が出れば OK
+5. 設定変更は File Station で `docker/f1-hotel-monitor/data/config.toml` を編集。コード更新はコンテナ再起動
+
 ### B''. Synology NAS・Docker 非対応機種（タスクスケジューラ＋公式 Python）
 
 パッケージセンターに Container Manager が出ない機種（J シリーズなど）向け。楽天のみ（東横INN は対象外）。

@@ -30,13 +30,13 @@ log() { echo "[f1hotel] $*"; }
 PY=""
 for c in /usr/local/bin/python3 /var/packages/Python3*/target/usr/bin/python3 /var/packages/py3k/target/usr/local/bin/python3 /usr/bin/python3; do
   for p in $c; do
-    if [ -x "$p" ] && "$p" -c 'import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)' 2>/dev/null; then
+    if [ -x "$p" ] && "$p" -c 'import sys; sys.exit(0 if sys.version_info >= (3,9) else 1)' 2>/dev/null; then
       PY="$p"; break 2
     fi
   done
 done
 if [ -z "$PY" ]; then
-  echo "Python 3.11 以上が見つかりません。パッケージセンターで Synology 公式の Python 3 をインストールしてください。" >&2
+  echo "Python 3.9 以上が見つかりません。パッケージセンターで Synology 公式の Python 3 をインストールしてください。" >&2
   for c in /usr/local/bin/python3 /var/packages/Python3*/target/usr/bin/python3 /usr/bin/python3; do
     for p in $c; do [ -x "$p" ] && echo "  found: $p ($("$p" --version 2>&1))"; done
   done
@@ -69,7 +69,7 @@ if [ ! -x .venv/bin/python ]; then
   fi
 fi
 if [ -x .venv/bin/python ]; then RUNPY=".venv/bin/python"; PIPOPT=""; else RUNPY="$PY"; PIPOPT="--user"; fi
-"$RUNPY" -m pip install -q $PIPOPT requests python-dotenv beautifulsoup4 2>&1 | grep -v "WARNING: Running pip as" || true
+"$RUNPY" -m pip install -q $PIPOPT requests python-dotenv beautifulsoup4 'tomli; python_version < "3.11"' 2>&1 | grep -v "WARNING: Running pip as" || true
 
 # --- .env（環境変数が渡されていれば毎回書き直す） ------------------------
 if [ -n "${RAKUTEN_APP_ID:-}" ]; then
