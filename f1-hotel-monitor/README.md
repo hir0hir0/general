@@ -92,7 +92,7 @@ QuickConnect で DSM に入り、Container Manager の「プロジェクト」�
    - プロジェクト名: `f1-hotel-monitor`
    - パス: `/docker/f1-hotel-monitor`（新規作成）
    - ソース: 「docker-compose.yml を作成」を選び、[`deploy/docker-compose.synology.yml`](deploy/docker-compose.synology.yml) の内容を貼り付ける
-3. 貼り付けた中の `RAKUTEN_APP_ID` と `NTFY_TOPIC` を自分の値にして「次へ」→「完了」
+3. 貼り付けた中の `RAKUTEN_APP_ID`・`RAKUTEN_ACCESS_KEY`・`NTFY_TOPIC` を自分の値にして「次へ」→「完了」
 4. 起動後、コンテナ `f1-hotel-monitor` の **ログ** で「[boot] fetching branch」→ 表出力が出れば OK
 5. 設定変更は File Station で `/docker/f1-hotel-monitor/data/config.toml` を編集（次回実行時に反映）
 6. コード更新はコンテナを再起動するだけ（起動時に再取得）。`F1HOTEL_BRANCH` で取得ブランチを指定
@@ -112,7 +112,8 @@ DSM 7.2 に更新できる機種なら、更新して上の B の手順にする
    - **詳細設定 > 環境**: 次を追加
      - `TZ` = `Asia/Tokyo`
      - `F1HOTEL_BRANCH` = `main`（未マージの間は `claude/quirky-ride-2rg4ew`）
-     - `RAKUTEN_APP_ID` = 楽天の applicationId
+     - `RAKUTEN_APP_ID` = 楽天の Application ID
+     - `RAKUTEN_ACCESS_KEY` = 楽天の Access Key
      - `NOTIFY_CHANNELS` = `ntfy`
      - `NTFY_TOPIC` = ntfy のトピック名
    - **詳細設定 > 実行コマンド**（「実行コマンド」欄）:
@@ -132,7 +133,8 @@ DSM 7.2 に更新できる機種なら、更新して上の B の手順にする
    - 実行コマンドに次を貼り、値を自分のものにする:
 
 ```bash
-export RAKUTEN_APP_ID=楽天のapplicationId
+export RAKUTEN_APP_ID=楽天のApplication ID
+export RAKUTEN_ACCESS_KEY=楽天のAccess Key
 export NTFY_TOPIC=ntfyのトピック名
 export NOTIFY_CHANNELS=ntfy
 export F1HOTEL_BRANCH=claude/quirky-ride-2rg4ew
@@ -152,7 +154,7 @@ curl -fsSL https://raw.githubusercontent.com/hir0hir0/general/main/f1-hotel-moni
 ```
 
 - 配置先は `/volume1/docker/f1-hotel-monitor`（`INSTALL_DIR=... sudo -E bash` で変更可）
-- 初回は `.env` を作って止まるので、`RAKUTEN_APP_ID` と `NTFY_TOPIC` を書いて同じコマンドを再実行する
+- 初回は `.env` を作って止まるので、`RAKUTEN_APP_ID`・`RAKUTEN_ACCESS_KEY`・`NTFY_TOPIC` を書いて同じコマンドを再実行する
 - 2 回目以降は通知テスト → 楽天エリア一覧の表示 → 常駐開始まで自動で進む
 - 更新時も同じコマンドでよい（`.env` / `config.toml` / `data/` は保持される）
 - ログ: `docker compose -f /volume1/docker/f1-hotel-monitor/deploy/docker-compose.yml logs -f`
