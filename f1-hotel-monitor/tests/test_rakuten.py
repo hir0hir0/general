@@ -166,6 +166,15 @@ def test_build_vacant_params(cfg):
     assert p["page"] == 2 and p["hits"] == 30 and p["responseType"] == "large"
 
 
+def test_config_stay_ranges(cfg):
+    labels = [(s.checkin.isoformat(), s.checkout.isoformat(), s.nights) for s in cfg.stays]
+    assert ("2027-04-09", "2027-04-12", 3) in labels  # 金〜月（本命）
+    assert ("2027-04-09", "2027-04-11", 2) in labels
+    assert ("2027-04-08", "2027-04-11", 3) in labels
+    assert ("2027-04-10", "2027-04-12", 2) in labels
+    assert len(labels) == len(set(labels))
+
+
 def test_config_has_four_person_parties(cfg):
     labels = [p.label for p in cfg.parties]
     assert labels == ["親子2人1室", "4人1室", "4人2室"]

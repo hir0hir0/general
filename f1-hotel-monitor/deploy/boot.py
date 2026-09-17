@@ -64,23 +64,42 @@ else:
     except Exception as e:  # noqa: BLE001
         log(f"ブラウザ導入に失敗（東横INN は取得できません。楽天のみ続行）: {e}")
 
-# 4. 設定（人数パターン未対応の旧ファイルは退避して入れ替える）
+# 4. 設定
+#    ユーザーが編集していなければ最新版に自動更新する。編集済みなら残して .new を置く。
 cfg = os.path.join(DATA, "config.toml")
+shipped_repo = f"{APP}/config.toml"
+shipped_marker = os.path.join(DATA, ".config.shipped.toml")  # 前回配布した内容
+new_text = open(shipped_repo, encoding="utf-8").read()
+
 if not os.path.exists(cfg):
-    shutil.copy(f"{APP}/config.toml", cfg)
+    shutil.copy(shipped_repo, cfg)
     log(f"{cfg} を作成しました（File Station で編集可）")
+    shutil.copy(shipped_repo, shipped_marker)
 else:
+    current = ""
     try:
         current = open(cfg, encoding="utf-8").read()
     except OSError:
-        current = ""
-    if "stay.parties" not in current:
+        pass
+    previous = ""
+    if os.path.exists(shipped_marker):
+        try:
+            previous = open(shipped_marker, encoding="utf-8").read()
+        except OSError:
+            pass
+    if current == new_text:
+        shutil.copy(shipped_repo, shipped_marker)
+    elif current == previous or "stay.parties" not in current:
         import datetime
 
         bak = cfg + "." + datetime.datetime.now().strftime("%Y%m%d%H%M%S") + ".bak"
         shutil.copy(cfg, bak)
-        shutil.copy(f"{APP}/config.toml", cfg)
-        log(f"人数パターン対応のため config.toml を更新しました（旧ファイル: {bak}）")
+        shutil.copy(shipped_repo, cfg)
+        shutil.copy(shipped_repo, shipped_marker)
+        log(f"config.toml を最新版に更新しました（旧ファイル: {bak}）")
+    else:
+        shutil.copy(shipped_repo, cfg + ".new")
+        log("config.toml は編集済みのため維持しました。新しい既定は config.toml.new を参照")
 
 # 5. 起動
 os.chdir(APP)

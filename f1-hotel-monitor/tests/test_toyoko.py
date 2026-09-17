@@ -74,7 +74,7 @@ def test_fetch_toyoko_with_fake_fetcher(cfg):
                 out.append(FetchedPage(u, SAMPLE))
         return out
 
-    res = fetch_toyoko(cfg, fetcher=fake, parties=[PARTY])
+    res = fetch_toyoko(cfg, fetcher=fake, parties=[PARTY], stays=[STAY, Stay(dt.date(2027, 4, 8), dt.date(2027, 4, 11))])
     assert len(calls[0]) == 2  # code 未設定ホテルは除外、2 日程分
     assert len(res.offers) == 2 and len(res.errors) == 1 and "timeout" in res.errors[0]
 
@@ -88,14 +88,20 @@ def test_fetch_toyoko_covers_every_party(cfg):
         return [FetchedPage(u, SAMPLE) for u in urls]
 
     res = fetch_toyoko(cfg, fetcher=fake)
-    assert len(calls[0]) == 6  # 3 パターン × 2 日程
+    assert len(calls[0]) == 3 * len(cfg.stays)  # 3 パターン × 日程数
     assert {o.party for o in res.offers} == {"親子2人1室", "4人1室", "4人2室"}
     assert any("room=2" in u for u in calls[0])
 
 
 def test_fetch_toyoko_unparsed_dumps_html(cfg):
     cfg.toyoko_hotels = [HOTEL]
-    res = fetch_toyoko(cfg, fetcher=lambda urls, c: [FetchedPage(u, "<p>Loading</p>") for u in urls], parties=[PARTY])
+    stays = [STAY, Stay(dt.date(2027, 4, 8), dt.date(2027, 4, 11))]
+    res = fetch_toyoko(
+        cfg,
+        fetcher=lambda urls, c: [FetchedPage(u, "<p>Loading</p>") for u in urls],
+        parties=[PARTY],
+        stays=stays,
+    )
     assert not res.offers and len(res.errors) == 2
     dumps = list((cfg.data_dir / "debug").glob("toyoko_00246_*.html"))
     assert len(dumps) == 2

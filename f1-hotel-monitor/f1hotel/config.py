@@ -104,11 +104,20 @@ def load_config(path: Path | str | None = None, env_path: Path | str | None = No
         raw = tomllib.load(f)
 
     stay = raw["stay"]
-    checkout = _parse_date(stay["checkout"])
-    stays = [Stay(_parse_date(ci), checkout) for ci in stay["checkins"]]
-    for s in stays:
-        if s.nights <= 0:
-            raise ValueError(f"invalid stay: {s}")
+    if stay.get("ranges"):
+        stays = [Stay(_parse_date(r["checkin"]), _parse_date(r["checkout"])) for r in stay["ranges"]]
+    else:  # 旧形式: checkout 固定 + checkins 複数
+        checkout = _parse_date(stay["checkout"])
+        stays = [Stay(_parse_date(ci), checkout) for ci in stay["checkins"]]
+    seen: set[tuple[dt.date, dt.date]] = set()
+    uniq: list[Stay] = []
+    for st in stays:
+        if st.nights <= 0:
+            raise ValueError(f"invalid stay: {st}")
+        if (st.checkin, st.checkout) not in seen:
+            seen.add((st.checkin, st.checkout))
+            uniq.append(st)
+    stays = uniq
 
     parties = [Party(**p) for p in stay.get("parties", [])]
     if not parties:  # 旧形式（stay.adults など）からの互換
