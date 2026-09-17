@@ -18,6 +18,7 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium          # 東横INN 取得に必要（楽天のみなら不要）
 cp .env.example .env                 # 秘密情報はここに
+chmod +x run.sh                      # cron 用ラッパー
 ```
 
 ### 楽天トラベル API キー（applicationId）の取得
