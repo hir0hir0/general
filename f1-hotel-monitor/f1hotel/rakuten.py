@@ -378,6 +378,17 @@ def parse_vacant_response(data: dict[str, Any], stay: Stay, target: SearchTarget
     return offers
 
 
+def save_sample(data: dict[str, Any], path: Path, max_hotels: int = 2) -> None:
+    """料金仕様の確認用に、生応答の先頭数件を保存する。"""
+    try:
+        sample = dict(data)
+        sample["hotels"] = data.get("hotels", [])[:max_hotels]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sample, ensure_ascii=False, indent=1), encoding="utf-8")
+    except (OSError, TypeError) as e:
+        log.warning("サンプル保存に失敗: %s", e)
+
+
 def fetch_rakuten(
     cfg: Config,
     client: RakutenClient,
@@ -390,6 +401,7 @@ def fetch_rakuten(
     max_pages = int(cfg.rakuten.get("max_pages", 5))
     result = SourceResult(source="rakuten", offers=[])
     seen: set[str] = set()
+    sampled_nights: set[int] = set()
     for party in parties:
       for stay in stays:
         for target in targets:
@@ -406,6 +418,9 @@ def fetch_rakuten(
                 if not data:
                     log.info("rakuten [%s] %s %s: 該当なし", party.label, target.name or target.small, stay.label)
                     break
+                if stay.nights not in sampled_nights and data.get("hotels"):
+                    save_sample(data, cfg.data_dir / f"rakuten_sample_{stay.nights}nights.json")
+                    sampled_nights.add(stay.nights)
                 offers = parse_vacant_response(data, stay, target, party)
                 for o in offers:
                     if o.key not in seen:
