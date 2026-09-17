@@ -1,0 +1,137 @@
+# 2027 F1日本GP 宿監視 設定
+# 秘密情報（APIキー・トークン）は .env に置く。ここには置かない。
+
+[stay]
+# チェックアウト固定、チェックインは複数（4/8〜11 の3泊 と 4/9〜11 の2泊）
+checkout = "2027-04-11"
+checkins = ["2027-04-08", "2027-04-09"]
+adults = 1
+# 幼児（食事なし・布団なし＝添い寝）。楽天API の infantWithoutMBNum に対応
+infants_no_meal_no_bed = 1
+rooms = 1
+
+[thresholds]
+# 1泊あたり この金額以下なら「即」、超えたら「参考」
+instant_price_per_night = 25000
+
+[schedule]
+# 通常の実行時刻（JST）。`monitor.py schedule` と crontab の両方で使う
+daily_times = ["09:00", "21:00"]
+# 開放直後期は 1 時間毎（JST）。[開始日, 終了日] の両端を含む
+dense_windows = [
+  ["2026-11-01", "2026-11-03"],   # スーパーホテル鈴鹿 開放
+  ["2027-01-13", "2027-01-22"],   # ルートイン 鈴鹿レース日 特別販売（2026年実績 1/15・1/20 14時）
+]
+# 指定日に 1 回だけ送るリマインド通知（開放日の見落とし防止）
+[[schedule.reminders]]
+date = "2026-10-31"
+message = "明日 11/1 スーパーホテル鈴鹿 が 2027/4 分を開放予定。手動でも確認。"
+[[schedule.reminders]]
+date = "2027-01-10"
+message = "ルートイン鈴鹿レース日 特別販売は例年 1月中旬 14時ネット限定。公式の告知を確認し、開放日に手動予約できる体制を。"
+
+# ---------------------------------------------------------------------------
+# 楽天トラベル VacantHotelSearch API
+# ---------------------------------------------------------------------------
+[rakuten]
+hits = 30            # 1 ページ最大 30
+max_pages = 5        # エリア×日程あたりの最大ページ数
+request_interval_sec = 1.05   # レート制限 1req/sec
+timeout_sec = 20
+
+# エリア定義。small_keywords / detail_keywords は GetAreaClass API の
+# smallClassName / detailClassName に部分一致させる（コードのハードコード回避）。
+# 実際の名称は `python monitor.py areas --middle mie` で確認して調整する。
+# detail_keywords を指定すると、一致した detailClass ごとに検索して tier を細かく分ける。
+# detail が一致しない場合は small 全体で検索する。
+[[rakuten.areas]]
+tier = 1
+label = "鈴鹿・四日市"
+middle = "mie"
+small_keywords = ["鈴鹿", "四日市"]
+detail_keywords = ["鈴鹿", "白子", "四日市"]
+
+[[rakuten.areas]]
+tier = 1
+label = "津"
+middle = "mie"
+small_keywords = ["津"]
+detail_keywords = ["津"]
+
+[[rakuten.areas]]
+tier = 2
+label = "桑名・湯の山・亀山"
+middle = "mie"
+small_keywords = ["桑名", "湯の山", "亀山"]
+detail_keywords = ["桑名", "長島", "湯の山", "菰野", "亀山"]
+
+[[rakuten.areas]]
+tier = 2
+label = "松阪・伊勢"
+middle = "mie"
+small_keywords = ["松阪", "伊勢"]
+detail_keywords = ["松阪", "伊勢"]
+
+[[rakuten.areas]]
+tier = 3
+label = "名古屋"
+middle = "aichi"
+small_keywords = ["名古屋"]
+detail_keywords = ["名古屋駅", "金山", "栄", "伏見"]
+
+[[rakuten.areas]]
+tier = 4
+label = "名張・伊賀"
+middle = "mie"
+small_keywords = ["伊賀", "名張"]
+detail_keywords = ["伊賀", "名張"]
+
+[[rakuten.areas]]
+tier = 4
+label = "岐阜"
+middle = "gifu"
+small_keywords = ["岐阜"]
+detail_keywords = ["岐阜駅", "岐阜市"]
+
+# ---------------------------------------------------------------------------
+# 東横INN（Playwright）
+# ---------------------------------------------------------------------------
+[toyoko]
+# 空室検索ページの URL テンプレート。{code} {ci} {co} {adults} {rooms} が展開される。
+# ※ 初回に `python monitor.py toyoko-dump` で実 URL・DOM を確認して調整する。
+url_template = "https://www.toyoko-inn.com/search/reserve/room?hotel={code}&chkin={ci}&chkout={co}&adult={adults}&room={rooms}"
+date_format = "%Y/%m/%d"
+timeout_sec = 60
+headless = true
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+locale = "ja-JP"
+# 取得間隔（サイト負荷配慮）
+request_interval_sec = 3.0
+# プラン要素の候補セレクタ（上から順に試し、最初に要素が見つかったものを使う）
+plan_selectors = [".roomList .room", ".plan-list .plan", "li.room", "[class*=roomItem]", "[class*=plan]"]
+name_selectors = [".roomName", ".room-name", "h3", "h4", "[class*=name]"]
+price_selectors = [".price", "[class*=price]", "[class*=charge]"]
+soldout_keywords = ["満室", "空室なし", "ご予約いただけません", "×"]
+
+# 東横INN は小学生以下 1 名添い寝無料 → 大人1 で検索すればよい
+# code は公式サイトのホテルページ URL（/search/detail/<code>/ など）から控える
+[[toyoko.hotels]]
+code = "00000"          # TODO: 実 URL から控える
+name = "東横INN津駅西口"
+area_label = "津"
+tier = 1
+
+[[toyoko.hotels]]
+code = "00000"          # TODO: 実 URL から控える
+name = "東横INN近鉄四日市駅北口"
+area_label = "四日市"
+tier = 1
+
+# ---------------------------------------------------------------------------
+# 子連れ加点（キーワード判定）
+# ---------------------------------------------------------------------------
+[scoring]
+walk_minutes_max = 5
+breakfast_start_max = "06:30"
+bath_keywords = ["大浴場", "温泉", "露天"]
+family_room_keywords = ["ファミリー", "ツイン", "和室", "和洋室", "トリプル"]

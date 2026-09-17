@@ -1,0 +1,232 @@
+"""通知（ntfy.sh / LINE Messaging API / Gmail SMTP）。
+
+チャネルは .env の NOTIFY_CHANNELS（例: "ntfy,line"）で選ぶ。
+エラー通知は別チャネル（ntfy は別トピック、LINE/Gmail は件名に ⚠）で 1 日 1 回まで。
+"""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import logging
+import os
+import smtplib
+from email.message import EmailMessage
+from pathlib import Path
+from typing import Any
+
+import requests
+
+from .config import Config
+from .models import Offer
+from .scoring import Score, score_offer, sort_key
+from .state import Diff
+
+log = logging.getLogger(__name__)
+
+LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
+LINE_MAX_TEXT = 4800
+
+
+class NotifyError(RuntimeError):
+    pass
+
+
+# ---------------------------------------------------------------------------
+# 本文生成
+# ---------------------------------------------------------------------------
+def fmt_yen(v: int | None) -> str:
+    return f"{v:,}円" if v is not None else "料金不明"
+
+
+def format_offer(o: Offer, s: Score) -> str:
+    stay = f"{o.checkin[5:].replace('-', '/')}-{o.checkout[5:].replace('-', '/')}({o.nights}泊)"
+    lines = [
+        f"{s.label} {o.hotel_name}",
+        f"  {o.area_label} tier{o.tier} / {stay}",
+        f"  {o.room_name or '-'} / {o.plan_name[:50]}",
+        f"  合計 {fmt_yen(o.total_price)}（{fmt_yen(o.price_per_night)}/泊）",
+    ]
+    if o.url:
+        lines.append(f"  {o.url}")
+    return "\n".join(lines)
+
+
+def build_diff_message(diff: Diff, cfg: Config) -> tuple[str, str, str | None]:
+    """(title, body, click_url) を返す。通知対象がなければ body は空。"""
+    scored_new = [(o, score_offer(o, cfg.scoring, cfg.instant_price_per_night)) for o in diff.new]
+    scored_new.sort(key=lambda t: sort_key(*t))
+    instant = sum(1 for _, s in scored_new if s.priority == "即")
+
+    parts: list[str] = []
+    if scored_new:
+        parts.append(f"■ 新規空き {len(scored_new)}件（即 {instant}件）")
+        parts.extend(format_offer(o, s) for o, s in scored_new)
+    if diff.price_changed:
+        parts.append(f"■ 料金変動 {len(diff.price_changed)}件")
+        for old, new in sorted(diff.price_changed, key=lambda t: t[1].tier):
+            parts.append(
+                f"・{new.hotel_name} {new.checkin[5:]}〜 {new.room_name}: "
+                f"{fmt_yen(old.total_price)} → {fmt_yen(new.total_price)}\n  {new.url}"
+            )
+    if diff.gone:
+        parts.append(f"■ 消滅 {len(diff.gone)}件")
+        parts.extend(f"・{o.hotel_name} {o.checkin[5:]}〜 {o.room_name}" for o in diff.gone[:20])
+        if len(diff.gone) > 20:
+            parts.append(f"  …他 {len(diff.gone) - 20} 件")
+
+    if not parts:
+        return "", "", None
+    if scored_new:
+        title = f"🏨 F1鈴鹿 宿: 新規{len(scored_new)}件" + (f" (即{instant})" if instant else "")
+    else:
+        title = "🏨 F1鈴鹿 宿: 変動あり"
+    click = scored_new[0][0].url if scored_new and scored_new[0][0].url else None
+    return title, "\n\n".join(parts), click
+
+
+# ---------------------------------------------------------------------------
+# 送信
+# ---------------------------------------------------------------------------
+class Notifier:
+    def __init__(self, channels: list[str] | None = None, session: requests.Session | None = None, dry_run: bool = False):
+        self.channels = channels if channels is not None else [
+            c.strip() for c in os.environ.get("NOTIFY_CHANNELS", "").split(",") if c.strip()
+        ]
+        self.session = session or requests.Session()
+        self.dry_run = dry_run
+
+    def send(self, title: str, body: str, *, error: bool = False, click: str | None = None, priority: int = 3) -> list[str]:
+        """全チャネルに送る。失敗したチャネルのエラー文字列を返す。"""
+        if not self.channels:
+            log.warning("NOTIFY_CHANNELS 未設定: 通知をスキップ（stdout に出力）\n%s\n%s", title, body)
+            return []
+        failures: list[str] = []
+        for ch in self.channels:
+            try:
+                if self.dry_run:
+                    log.info("[dry-run] %s: %s", ch, title)
+                    continue
+                if ch == "ntfy":
+                    self._ntfy(title, body, error, click, priority)
+                elif ch == "line":
+                    self._line(title, body, error)
+                elif ch == "gmail":
+                    self._gmail(title, body, error)
+                else:
+                    raise NotifyError(f"unknown channel: {ch}")
+            except Exception as e:  # noqa: BLE001
+                log.error("notify %s failed: %s", ch, e)
+                failures.append(f"{ch}: {e}")
+        return failures
+
+    # --- ntfy -----------------------------------------------------------
+    def _ntfy(self, title: str, body: str, error: bool, click: str | None, priority: int) -> None:
+        server = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+        topic = os.environ.get("NTFY_TOPIC")
+        if not topic:
+            raise NotifyError("NTFY_TOPIC 未設定")
+        if error:
+            topic = os.environ.get("NTFY_ERROR_TOPIC") or f"{topic}-errors"
+        payload: dict[str, Any] = {
+            "topic": topic,
+            "title": title,
+            "message": body[:4000],
+            "priority": 4 if error else priority,
+            "tags": ["warning"] if error else ["hotel"],
+        }
+        if click:
+            payload["click"] = click
+        headers = {}
+        token = os.environ.get("NTFY_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        r = self.session.post(server, data=json.dumps(payload).encode("utf-8"), headers=headers, timeout=20)
+        r.raise_for_status()
+
+    # --- LINE Messaging API ------------------------------------------------
+    def _line(self, title: str, body: str, error: bool) -> None:
+        token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
+        to = os.environ.get("LINE_USER_ID")
+        if not token or not to:
+            raise NotifyError("LINE_CHANNEL_ACCESS_TOKEN / LINE_USER_ID 未設定")
+        text = ("⚠ " if error else "") + title + "\n" + body
+        chunks = [text[i : i + LINE_MAX_TEXT] for i in range(0, len(text), LINE_MAX_TEXT)] or [text]
+        for i in range(0, len(chunks), 5):  # 1 push あたり最大 5 メッセージ
+            r = self.session.post(
+                LINE_PUSH_URL,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                json={"to": to, "messages": [{"type": "text", "text": c} for c in chunks[i : i + 5]]},
+                timeout=20,
+            )
+            if r.status_code >= 400:
+                raise NotifyError(f"LINE {r.status_code}: {r.text[:200]}")
+
+    # --- Gmail SMTP ----------------------------------------------------------
+    def _gmail(self, title: str, body: str, error: bool) -> None:
+        user = os.environ.get("GMAIL_USER")
+        pw = os.environ.get("GMAIL_APP_PASSWORD")
+        to = os.environ.get("GMAIL_TO") or user
+        if not user or not pw:
+            raise NotifyError("GMAIL_USER / GMAIL_APP_PASSWORD 未設定")
+        msg = EmailMessage()
+        msg["Subject"] = ("⚠ " if error else "") + title
+        msg["From"] = user
+        msg["To"] = to
+        msg.set_content(body)
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
+            s.login(user, pw)
+            s.send_message(msg)
+
+
+# ---------------------------------------------------------------------------
+# エラー通知の 1 日 1 回制限
+# ---------------------------------------------------------------------------
+ERROR_THROTTLE_FILE = "error_notify.json"
+
+
+def should_notify_error(data_dir: Path, today: dt.date | None = None) -> bool:
+    today = today or dt.date.today()
+    path = data_dir / ERROR_THROTTLE_FILE
+    if path.exists():
+        try:
+            last = json.loads(path.read_text(encoding="utf-8")).get("date")
+            if last == today.isoformat():
+                return False
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    return True
+
+
+def mark_error_notified(data_dir: Path, today: dt.date | None = None) -> None:
+    today = today or dt.date.today()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / ERROR_THROTTLE_FILE).write_text(json.dumps({"date": today.isoformat()}), encoding="utf-8")
+
+
+REMINDER_FILE = "reminders_sent.json"
+
+
+def due_reminders(cfg: Config, data_dir: Path, today: dt.date | None = None) -> list[dict[str, str]]:
+    """今日が date のリマインドで未送信のもの。"""
+    today = today or dt.date.today()
+    path = data_dir / REMINDER_FILE
+    sent: list[str] = []
+    if path.exists():
+        try:
+            sent = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            sent = []
+    return [r for r in cfg.reminders if r.get("date") == today.isoformat() and r["date"] + r["message"] not in sent]
+
+
+def mark_reminder_sent(data_dir: Path, reminder: dict[str, str]) -> None:
+    path = data_dir / REMINDER_FILE
+    sent: list[str] = []
+    if path.exists():
+        try:
+            sent = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            sent = []
+    sent.append(reminder["date"] + reminder["message"])
+    data_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sent, ensure_ascii=False), encoding="utf-8")
