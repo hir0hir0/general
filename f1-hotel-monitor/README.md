@@ -107,7 +107,7 @@ DSM 7.1 ではパッケージ名が **Docker**（7.2 から Container Manager）
 
 1. パッケージセンターで「Docker」を検索してインストール
 2. File Station で `docker` 共有フォルダ内に `f1-hotel-monitor/data` フォルダを作る
-3. Docker > レジストリ で `python` を検索し、**Docker Official Image の python** を選んで「ダウンロード」。タグは **3.11-slim**
+3. Docker > レジストリ で `python` を検索し、**Docker Official Image の python** を選んで「ダウンロード」。タグは **3.11-slim-bookworm**（Debian 12。Playwright の依存導入が確実）
 4. Docker > イメージ でそのイメージを選び「起動」
    - コンテナ名: `f1-hotel-monitor`、「自動再起動を有効にする」に✓
    - **詳細設定 > 環境**: 次を追加
