@@ -102,12 +102,13 @@ QuickConnect で DSM に入り、Container Manager の「プロジェクト」�
 
 ### B-2. DSM 7.1 の「Docker」パッケージで導入（DS418play など、Container Manager が出ない DSM 7.1 機）
 
-DSM 7.1 ではパッケージ名が **Docker**（7.2 から Container Manager）。プロジェクト（compose 貼り付け）機能がないので GUI で 1 コンテナ作る。
-DSM 7.2 に更新できる機種なら、更新して上の B の手順にするほうが簡単。
+DSM 7.1 ではパッケージ名が **Docker**（7.2 から Container Manager）。プロジェクト（compose 貼り付け）機能がなく、
+レジストリ検索は Docker Hub のみなので、Docker Hub 公式の `python` イメージを使い、起動時に Chromium を自動導入する。
 
 1. パッケージセンターで「Docker」を検索してインストール
-2. Docker > レジストリ で `mcr.microsoft.com/playwright/python` を検索し、タグ **v1.63.0-noble** をダウンロード
-3. Docker > イメージ でそのイメージを選び「起動」
+2. File Station で `docker` 共有フォルダ内に `f1-hotel-monitor/data` フォルダを作る
+3. Docker > レジストリ で `python` を検索し、**Docker Official Image の python** を選んで「ダウンロード」。タグは **3.11-slim**
+4. Docker > イメージ でそのイメージを選び「起動」
    - コンテナ名: `f1-hotel-monitor`、「自動再起動を有効にする」に✓
    - **詳細設定 > 環境**: 次を追加
      - `TZ` = `Asia/Tokyo`
@@ -116,12 +117,14 @@ DSM 7.2 に更新できる機種なら、更新して上の B の手順にする
      - `RAKUTEN_ACCESS_KEY` = 楽天の Access Key
      - `NOTIFY_CHANNELS` = `ntfy`
      - `NTFY_TOPIC` = ntfy のトピック名
-   - **詳細設定 > 実行コマンド**（「実行コマンド」欄）:
-     `bash -c "curl -fsSL https://raw.githubusercontent.com/hir0hir0/general/${F1HOTEL_BRANCH}/f1-hotel-monitor/deploy/container-boot.sh | bash"`
-   - **ボリューム**: File Station で `docker/f1-hotel-monitor/data` フォルダを作り、マウントパス `/data` に追加
+     - （楽天のみでよければ `F1HOTEL_SKIP_BROWSER` = `1` を追加すると起動が速い）
+   - **詳細設定 > 実行コマンド**:
+     `python -c "import os,urllib.request as u;exec(u.urlopen('https://raw.githubusercontent.com/hir0hir0/general/'+os.environ.get('F1HOTEL_BRANCH','main')+'/f1-hotel-monitor/deploy/boot.py').read())"`
+   - **ボリューム**: 手順 2 のフォルダをマウントパス `/data` で追加
    - ポート・ネットワークは既定のまま
-4. 起動後、コンテナの「詳細 > ログ」に `[boot] fetching branch` と空室の表が出れば OK
-5. 設定変更は File Station で `docker/f1-hotel-monitor/data/config.toml` を編集。コード更新はコンテナ再起動
+5. 起動後、コンテナの「詳細 > ログ」に `[boot] fetching branch` → `chromium ready` → 空室の表が出れば OK。
+   初回は Chromium と依存ライブラリの導入で 3〜5 分かかる（`/data/pw-browsers` に保存され、次回以降は速い）
+6. 設定変更は File Station で `docker/f1-hotel-monitor/data/config.toml` を編集。コード更新はコンテナ再起動
 
 ### B''. Synology NAS・Docker 非対応機種（タスクスケジューラ＋公式 Python）
 

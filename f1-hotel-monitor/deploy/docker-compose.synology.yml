@@ -40,6 +40,6 @@ services:
       - ./data:/data
     working_dir: /app
     command:
-      - bash
+      - python
       - -c
-      - curl -fsSL "https://raw.githubusercontent.com/hir0hir0/general/$${F1HOTEL_BRANCH}/f1-hotel-monitor/deploy/container-boot.sh" | bash
+      - import os,urllib.request as u;exec(u.urlopen('https://raw.githubusercontent.com/hir0hir0/general/'+os.environ.get('F1HOTEL_BRANCH','main')+'/f1-hotel-monitor/deploy/boot.py').read())
