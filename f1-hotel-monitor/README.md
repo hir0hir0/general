@@ -126,7 +126,32 @@ DSM 7.1 ではパッケージ名が **Docker**（7.2 から Container Manager）
    初回は Chromium と依存ライブラリの導入で 3〜5 分かかる（`/data/pw-browsers` に保存され、次回以降は速い）
 6. 設定変更は File Station で `docker/f1-hotel-monitor/data/config.toml` を編集。コード更新はコンテナ再起動
 
-### B-3. DSM 7.1 で SSH から 1 行導入（レジストリのタグ取得が失敗する場合）
+### B-3. DSM のタスクスケジューラから導入（SSH も PC も不要・一番確実）
+
+Docker GUI のレジストリ検索が「レジストリをクエリできませんでした」で失敗する場合はこれが早い。
+タスクスケジューラは root でシェルを実行できるので、ブラウザだけで `docker pull` と `docker run` を流せる。
+
+1. パッケージセンターで **Docker** をインストールしておく
+2. コントロールパネル > **タスクスケジューラ** > 作成 > **予約タスク** > **ユーザー指定のスクリプト**
+   - 全般: タスク名 `f1hotel-setup`、ユーザー **root**
+   - スケジュール: 何でもよい（後で手動実行するだけ。「毎日」のままで可）
+   - タスク設定 > 「実行結果の詳細を通知する」または出力保存を有効にしておくとログが見える
+   - 実行コマンド に次を貼り、値を自分のものに置き換える:
+
+```bash
+export RAKUTEN_APP_ID=楽天のApplicationID
+export RAKUTEN_ACCESS_KEY=楽天のAccessKey
+export NTFY_TOPIC=ntfyのトピック名
+export F1HOTEL_BRANCH=claude/quirky-ride-2rg4ew
+curl -fsSL https://raw.githubusercontent.com/hir0hir0/general/${F1HOTEL_BRANCH}/f1-hotel-monitor/deploy/synology-docker-run.sh | bash
+```
+
+3. 保存 → 一覧でタスクを選び **「実行」** を押す（初回はイメージ取得で数分）
+4. Docker > コンテナ に `f1-hotel-monitor` が現れ、ログに `[boot] fetching branch` → 空室の表が出れば完了
+5. 以後は Docker GUI から停止・再起動できる。セットアップ用タスクは無効化か削除してよい
+6. 設定変更は File Station で `docker/f1-hotel-monitor/data/config.toml` を編集
+
+### B-4. SSH から 1 行導入
 
 DSM 7.1 の Docker GUI は古い Docker Hub API を使うため「レジストリをクエリできませんでした」が出ることがある。
 その場合は SSH から `docker run` で直接作るのが確実（compose 不要）。

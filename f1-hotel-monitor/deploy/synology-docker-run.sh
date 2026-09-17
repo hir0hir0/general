@@ -2,12 +2,17 @@
 # DSM 7.1 の Docker パッケージ向け。compose を使わず docker run だけでコンテナを作る。
 # SSH でログインして実行する（レジストリ GUI の「タグ取得失敗」を回避できる）。
 #
+# DSM の「タスクスケジューラ > ユーザー指定のスクリプト」(ユーザー: root) に貼ってもよい。
+#
 #   sudo RAKUTEN_APP_ID=xxx RAKUTEN_ACCESS_KEY=pk_xxx NTFY_TOPIC=yyy \
 #     F1HOTEL_BRANCH=claude/quirky-ride-2rg4ew \
 #     bash -c 'curl -fsSL https://raw.githubusercontent.com/hir0hir0/general/claude/quirky-ride-2rg4ew/f1-hotel-monitor/deploy/synology-docker-run.sh | bash'
 #
 # 環境変数（任意）: IMAGE, DATA_DIR, NAME, F1HOTEL_SKIP_BROWSER, NOTIFY_CHANNELS, NTFY_SERVER
 set -euo pipefail
+
+# DSM のタスクスケジューラは PATH が狭いので docker / curl の場所を足す
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 IMAGE="${IMAGE:-python:3.11-slim-bookworm}"
 NAME="${NAME:-f1-hotel-monitor}"
@@ -16,6 +21,11 @@ BRANCH="${F1HOTEL_BRANCH:-main}"
 
 log() { echo "[setup] $*"; }
 
+if ! command -v docker >/dev/null 2>&1; then
+  for p in /usr/local/bin/docker /var/packages/Docker/target/usr/bin/docker /var/packages/ContainerManager/target/usr/bin/docker; do
+    [ -x "$p" ] && { export PATH="$(dirname "$p"):$PATH"; break; }
+  done
+fi
 command -v docker >/dev/null 2>&1 || { echo "docker が見つかりません（パッケージセンターで Docker をインストール）" >&2; exit 1; }
 [ -n "${RAKUTEN_APP_ID:-}" ] || { echo "RAKUTEN_APP_ID を指定してください" >&2; exit 1; }
 [ -n "${RAKUTEN_ACCESS_KEY:-}" ] || { echo "RAKUTEN_ACCESS_KEY を指定してください" >&2; exit 1; }
