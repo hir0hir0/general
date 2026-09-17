@@ -13,6 +13,7 @@ def mk(key_id="1", price=36000, source="rakuten", **kw):
         hotel_name=f"宿{key_id}",
         area_label="鈴鹿",
         tier=1,
+        party="親子2人1室",
         checkin="2027-04-09",
         checkout="2027-04-11",
         nights=2,
@@ -59,6 +60,20 @@ def test_state_roundtrip_and_history(tmp_path):
     assert [e["event"] for e in events] == ["new", "new"]
 
 
+def test_threshold_is_per_party(cfg):
+    cheap = mk("1", price=90000, party="4人1室")   # 1泊 45,000 → 4人枠では「即」
+    s = score_offer(cheap, cfg.scoring, cfg.threshold_for(cheap))
+    assert s.priority == "即"
+    same_price_2ppl = mk("2", price=90000, party="親子2人1室")
+    assert score_offer(same_price_2ppl, cfg.scoring, cfg.threshold_for(same_price_2ppl)).priority == "参考"
+
+
+def test_key_separates_parties():
+    a = mk("1", party="4人1室")
+    b = mk("1", party="4人2室")
+    assert a.key != b.key
+
+
 def test_load_state_missing_or_broken(tmp_path):
     assert load_state(tmp_path) == {}
     (tmp_path / "state.json").write_text("{broken", encoding="utf-8")
@@ -73,23 +88,23 @@ def test_scoring_priority_and_bonuses(cfg):
         hotel_text="大浴場完備。朝食は6:30〜9:00。",
         room_name="ツイン",
     )
-    s = score_offer(o, cfg.scoring, cfg.instant_price_per_night)
+    s = score_offer(o, cfg.scoring, cfg.threshold_for(o))
     assert s.priority == "即"
     assert s.bonuses == ["駅徒歩3分", "大浴場", "朝食6:30〜", "ツイン"]
 
     o2 = mk("2", price=60000, access="駅から徒歩12分", room_name="シングル", extra={"breakfast": True})
-    s2 = score_offer(o2, cfg.scoring, cfg.instant_price_per_night)
+    s2 = score_offer(o2, cfg.scoring, cfg.threshold_for(o2))
     assert s2.priority == "参考" and s2.bonuses == ["朝食付"]
 
     o3 = mk("3", price=None)
-    assert score_offer(o3, cfg.scoring, cfg.instant_price_per_night).priority == "不明"
+    assert score_offer(o3, cfg.scoring, cfg.threshold_for(o3)).priority == "不明"
 
     o4 = mk("4", price=20000, access="駅前")
-    assert "駅前" in score_offer(o4, cfg.scoring, cfg.instant_price_per_night).bonuses
+    assert "駅前" in score_offer(o4, cfg.scoring, cfg.threshold_for(o4)).bonuses
 
 
 def test_sort_key_orders_instant_first(cfg):
     items = [mk("a", 60000), mk("b", 30000, tier=2), mk("c", 40000)]
-    scored = [(o, score_offer(o, cfg.scoring, cfg.instant_price_per_night)) for o in items]
+    scored = [(o, score_offer(o, cfg.scoring, cfg.threshold_for(o))) for o in items]
     scored.sort(key=lambda t: sort_key(*t))
     assert [o.hotel_id for o, _ in scored] == ["c", "b", "a"]

@@ -64,11 +64,23 @@ else:
     except Exception as e:  # noqa: BLE001
         log(f"ブラウザ導入に失敗（東横INN は取得できません。楽天のみ続行）: {e}")
 
-# 4. 設定
+# 4. 設定（人数パターン未対応の旧ファイルは退避して入れ替える）
 cfg = os.path.join(DATA, "config.toml")
 if not os.path.exists(cfg):
     shutil.copy(f"{APP}/config.toml", cfg)
     log(f"{cfg} を作成しました（File Station で編集可）")
+else:
+    try:
+        current = open(cfg, encoding="utf-8").read()
+    except OSError:
+        current = ""
+    if "stay.parties" not in current:
+        import datetime
+
+        bak = cfg + "." + datetime.datetime.now().strftime("%Y%m%d%H%M%S") + ".bak"
+        shutil.copy(cfg, bak)
+        shutil.copy(f"{APP}/config.toml", cfg)
+        log(f"人数パターン対応のため config.toml を更新しました（旧ファイル: {bak}）")
 
 # 5. 起動
 os.chdir(APP)

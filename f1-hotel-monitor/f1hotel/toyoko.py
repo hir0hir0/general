@@ -19,7 +19,7 @@ from typing import Any, Callable, Iterable
 from bs4 import BeautifulSoup
 
 from .config import Config, ToyokoHotel
-from .models import Offer, SourceResult, Stay
+from .models import Offer, Party, SourceResult, Stay
 
 log = logging.getLogger(__name__)
 
@@ -42,15 +42,15 @@ class PlanRow:
 # ---------------------------------------------------------------------------
 # URL
 # ---------------------------------------------------------------------------
-def build_url(cfg: Config, hotel: ToyokoHotel, stay: Stay) -> str:
+def build_url(cfg: Config, hotel: ToyokoHotel, stay: Stay, party: Party) -> str:
     t = cfg.toyoko
     fmt = t.get("date_format", "%Y/%m/%d")
     return t["url_template"].format(
         code=hotel.code,
         ci=stay.checkin.strftime(fmt),
         co=stay.checkout.strftime(fmt),
-        adults=cfg.adults,
-        rooms=cfg.rooms,
+        adults=party.adults,
+        rooms=party.rooms,
     )
 
 
@@ -133,14 +133,14 @@ def page_status(html: str, rows: list[PlanRow], toyoko_cfg: dict[str, Any]) -> s
     return "unparsed"
 
 
-def offers_from_rows(rows: list[PlanRow], hotel: ToyokoHotel, stay: Stay, url: str) -> list[Offer]:
+def offers_from_rows(rows: list[PlanRow], hotel: ToyokoHotel, stay: Stay, url: str, party: Party) -> list[Offer]:
     offers: list[Offer] = []
     fetched = dt.datetime.now().isoformat(timespec="seconds")
     for i, r in enumerate(rows):
         if r.soldout or r.price is None:
             continue
         # 東横INN のページは 1 泊あたり表示が普通なので、泊数を掛けて合計にする
-        total = r.price * stay.nights if r.price < 60_000 else r.price
+        total = (r.price * stay.nights if r.price < 60_000 else r.price) * party.rooms
         offers.append(
             Offer(
                 source="toyoko",
@@ -148,6 +148,7 @@ def offers_from_rows(rows: list[PlanRow], hotel: ToyokoHotel, stay: Stay, url: s
                 hotel_name=hotel.name,
                 area_label=hotel.area_label,
                 tier=hotel.tier,
+                party=party.label,
                 checkin=stay.checkin.isoformat(),
                 checkout=stay.checkout.isoformat(),
                 nights=stay.nights,
@@ -244,10 +245,12 @@ def _dump(debug_dir: Path, name: str, html: str | None, screenshot: bytes | None
 def fetch_toyoko(
     cfg: Config,
     stays: list[Stay] | None = None,
+    parties: list[Party] | None = None,
     fetcher: Callable[[list[str], dict[str, Any]], list[FetchedPage | Exception]] | None = None,
     dump_all: bool = False,
 ) -> SourceResult:
     stays = stays or cfg.stays
+    parties = parties or cfg.parties
     tcfg = cfg.toyoko
     result = SourceResult(source="toyoko", offers=[])
     hotels = [h for h in cfg.toyoko_hotels if h.code and h.code != "00000"]
@@ -257,17 +260,17 @@ def fetch_toyoko(
     if not hotels:
         return result
 
-    jobs: list[tuple[ToyokoHotel, Stay, str]] = [
-        (h, s, build_url(cfg, h, s)) for s in stays for h in hotels
+    jobs: list[tuple[ToyokoHotel, Stay, Party, str]] = [
+        (h, s, pt, build_url(cfg, h, s, pt)) for pt in parties for s in stays for h in hotels
     ]
     fetch = fetcher or (lambda urls, c: fetch_pages(urls, c, with_screenshot=dump_all))
-    pages = fetch([u for _, _, u in jobs], tcfg)
+    pages = fetch([u for _, _, _, u in jobs], tcfg)
     debug_dir = cfg.data_dir / "debug"
 
-    for (hotel, stay, url), page in zip(jobs, pages):
-        name = f"toyoko_{hotel.code}_{stay.checkin.isoformat()}"
+    for (hotel, stay, party, url), page in zip(jobs, pages):
+        name = f"toyoko_{hotel.code}_{party.label}_{stay.checkin.isoformat()}"
         if isinstance(page, Exception):
-            msg = f"toyoko {hotel.name} {stay.label}: {page}"
+            msg = f"toyoko [{party.label}] {hotel.name} {stay.label}: {page}"
             log.error(msg)
             result.errors.append(msg)
             _dump(debug_dir, name, None, getattr(page, "screenshot", None))
@@ -277,13 +280,13 @@ def fetch_toyoko(
         if dump_all:
             _dump(debug_dir, name, page.html, page.screenshot)
         if status == "unparsed":
-            msg = f"toyoko {hotel.name} {stay.label}: ページを解析できません（DOM 変更?） url={url}"
+            msg = f"toyoko [{party.label}] {hotel.name} {stay.label}: ページを解析できません（DOM 変更?） url={url}"
             log.error(msg)
             result.errors.append(msg)
             if not dump_all:
                 _dump(debug_dir, name, page.html, page.screenshot)
             continue
-        offers = offers_from_rows(rows, hotel, stay, url)
-        log.info("toyoko %s %s: %s (%d rows, %d offers)", hotel.name, stay.label, status, len(rows), len(offers))
+        offers = offers_from_rows(rows, hotel, stay, url, party)
+        log.info("toyoko [%s] %s %s: %s (%d rows, %d offers)", party.label, hotel.name, stay.label, status, len(rows), len(offers))
         result.offers.extend(offers)
     return result

@@ -42,7 +42,7 @@ def format_offer(o: Offer, s: Score) -> str:
     stay = f"{o.checkin[5:].replace('-', '/')}-{o.checkout[5:].replace('-', '/')}({o.nights}泊)"
     lines = [
         f"{s.label} {o.hotel_name}",
-        f"  {o.area_label} tier{o.tier} / {stay}",
+        f"  [{o.party}] {o.area_label} tier{o.tier} / {stay}",
         f"  {o.room_name or '-'} / {o.plan_name[:50]}",
         f"  合計 {fmt_yen(o.total_price)}（{fmt_yen(o.price_per_night)}/泊）",
     ]
@@ -53,8 +53,8 @@ def format_offer(o: Offer, s: Score) -> str:
 
 def build_diff_message(diff: Diff, cfg: Config) -> tuple[str, str, str | None]:
     """(title, body, click_url) を返す。通知対象がなければ body は空。"""
-    scored_new = [(o, score_offer(o, cfg.scoring, cfg.instant_price_per_night)) for o in diff.new]
-    scored_new.sort(key=lambda t: sort_key(*t))
+    scored_new = [(o, score_offer(o, cfg.scoring, cfg.threshold_for(o))) for o in diff.new]
+    scored_new.sort(key=lambda t: (t[0].party, *sort_key(*t)))
     instant = sum(1 for _, s in scored_new if s.priority == "即")
 
     parts: list[str] = []
@@ -65,12 +65,12 @@ def build_diff_message(diff: Diff, cfg: Config) -> tuple[str, str, str | None]:
         parts.append(f"■ 料金変動 {len(diff.price_changed)}件")
         for old, new in sorted(diff.price_changed, key=lambda t: t[1].tier):
             parts.append(
-                f"・{new.hotel_name} {new.checkin[5:]}〜 {new.room_name}: "
+                f"・[{new.party}] {new.hotel_name} {new.checkin[5:]}〜 {new.room_name}: "
                 f"{fmt_yen(old.total_price)} → {fmt_yen(new.total_price)}\n  {new.url}"
             )
     if diff.gone:
         parts.append(f"■ 消滅 {len(diff.gone)}件")
-        parts.extend(f"・{o.hotel_name} {o.checkin[5:]}〜 {o.room_name}" for o in diff.gone[:20])
+        parts.extend(f"・[{o.party}] {o.hotel_name} {o.checkin[5:]}〜 {o.room_name}" for o in diff.gone[:20])
         if len(diff.gone) > 20:
             parts.append(f"  …他 {len(diff.gone) - 20} 件")
 

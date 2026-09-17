@@ -21,7 +21,7 @@ from typing import Any, Callable, Iterable
 import requests
 
 from .config import Config, RakutenArea
-from .models import Offer, SourceResult, Stay
+from .models import Offer, Party, SourceResult, Stay
 
 log = logging.getLogger(__name__)
 
@@ -282,12 +282,12 @@ def resolve_targets(tree: list[MiddleClass], areas: list[RakutenArea]) -> tuple[
 # ---------------------------------------------------------------------------
 # 空室検索
 # ---------------------------------------------------------------------------
-def build_vacant_params(cfg: Config, stay: Stay, target: SearchTarget, page: int) -> dict[str, Any]:
+def build_vacant_params(cfg: Config, stay: Stay, target: SearchTarget, page: int, party: Party) -> dict[str, Any]:
     p: dict[str, Any] = {
         "checkinDate": stay.checkin.isoformat(),
         "checkoutDate": stay.checkout.isoformat(),
-        "adultNum": cfg.adults,
-        "roomNum": cfg.rooms,
+        "adultNum": party.adults,
+        "roomNum": party.rooms,
         "largeClassCode": "japan",
         "middleClassCode": target.middle,
         "smallClassCode": target.small,
@@ -299,8 +299,8 @@ def build_vacant_params(cfg: Config, stay: Stay, target: SearchTarget, page: int
     }
     if target.detail:
         p["detailClassCode"] = target.detail
-    if cfg.infants_no_meal_no_bed:
-        p["infantWithoutMBNum"] = cfg.infants_no_meal_no_bed
+    if party.infants_no_meal_no_bed:
+        p["infantWithoutMBNum"] = party.infants_no_meal_no_bed
     return p
 
 
@@ -319,7 +319,7 @@ def _split_hotel(entry: Any) -> tuple[dict[str, Any], list[list[dict[str, Any]]]
     return basic, rooms
 
 
-def parse_vacant_response(data: dict[str, Any], stay: Stay, target: SearchTarget) -> list[Offer]:
+def parse_vacant_response(data: dict[str, Any], stay: Stay, target: SearchTarget, party: Party) -> list[Offer]:
     offers: list[Offer] = []
     fetched = dt.datetime.now().isoformat(timespec="seconds")
     for entry in data.get("hotels", []):
@@ -347,7 +347,7 @@ def parse_vacant_response(data: dict[str, Any], stay: Stay, target: SearchTarget
                     total = int(last["total"])
                 else:
                     per_night = [int(c.get("rakutenCharge") or 0) for c in charges]
-                    total = sum(per_night) * int(data.get("_roomNum", 1)) if per_night else None
+                    total = sum(per_night) * party.rooms if per_night else None
             offers.append(
                 Offer(
                     source="rakuten",
@@ -355,6 +355,7 @@ def parse_vacant_response(data: dict[str, Any], stay: Stay, target: SearchTarget
                     hotel_name=str(basic.get("hotelName", "")),
                     area_label=f"{target.label}/{target.name}" if target.name else target.label,
                     tier=target.tier,
+                    party=party.label,
                     checkin=stay.checkin.isoformat(),
                     checkout=stay.checkout.isoformat(),
                     nights=stay.nights,
@@ -382,27 +383,30 @@ def fetch_rakuten(
     client: RakutenClient,
     targets: list[SearchTarget],
     stays: list[Stay] | None = None,
+    parties: list[Party] | None = None,
 ) -> SourceResult:
     stays = stays or cfg.stays
+    parties = parties or cfg.parties
     max_pages = int(cfg.rakuten.get("max_pages", 5))
     result = SourceResult(source="rakuten", offers=[])
     seen: set[str] = set()
-    for stay in stays:
+    for party in parties:
+      for stay in stays:
         for target in targets:
             page = 1
             while page <= max_pages:
-                params = build_vacant_params(cfg, stay, target, page)
+                params = build_vacant_params(cfg, stay, target, page, party)
                 try:
                     data = client.vacant_search(params)
                 except (RakutenError, requests.RequestException) as e:
-                    msg = f"rakuten {target.name or target.small} {stay.label} p{page}: {e}"
+                    msg = f"rakuten [{party.label}] {target.name or target.small} {stay.label} p{page}: {e}"
                     log.error(msg)
                     result.errors.append(msg)
                     break
                 if not data:
-                    log.info("rakuten %s %s: 該当なし", target.name or target.small, stay.label)
+                    log.info("rakuten [%s] %s %s: 該当なし", party.label, target.name or target.small, stay.label)
                     break
-                offers = parse_vacant_response(data, stay, target)
+                offers = parse_vacant_response(data, stay, target, party)
                 for o in offers:
                     if o.key not in seen:
                         seen.add(o.key)

@@ -6,7 +6,7 @@ import pytest
 
 from conftest import FIXTURES
 from f1hotel.config import ToyokoHotel
-from f1hotel.models import Stay
+from f1hotel.models import Party, Stay
 from f1hotel.toyoko import (
     FetchedPage,
     ToyokoFetchError,
@@ -21,10 +21,11 @@ from f1hotel.toyoko import (
 SAMPLE = (FIXTURES / "toyoko_sample.html").read_text(encoding="utf-8")
 STAY = Stay(dt.date(2027, 4, 9), dt.date(2027, 4, 11))
 HOTEL = ToyokoHotel("00246", "東横INN津駅西口", "津", 1)
+PARTY = Party("親子2人1室", adults=1, infants_no_meal_no_bed=1, rooms=1)
 
 
 def test_build_url(cfg):
-    url = build_url(cfg, HOTEL, STAY)
+    url = build_url(cfg, HOTEL, STAY, PARTY)
     assert "hotel=00246" in url and "chkin=2027/04/09" in url and "chkout=2027/04/11" in url and "adult=1" in url
 
 
@@ -52,10 +53,10 @@ def test_page_status_full_and_unparsed(cfg):
 
 def test_offers_from_rows_multiplies_nights(cfg):
     rows = parse_plans(SAMPLE, cfg.toyoko)
-    offers = offers_from_rows(rows, HOTEL, STAY, "https://example/x")
+    offers = offers_from_rows(rows, HOTEL, STAY, "https://example/x", PARTY)
     assert len(offers) == 2
     assert offers[0].total_price == 9800 * 2 and offers[0].price_per_night == 9800
-    assert offers[0].key == "toyoko:00246:シングル:2027-04-09:2027-04-11"
+    assert offers[0].key == "toyoko:00246:シングル:親子2人1室:2027-04-09:2027-04-11"
     assert offers[1].room_name == "ツイン"
 
 
@@ -73,14 +74,28 @@ def test_fetch_toyoko_with_fake_fetcher(cfg):
                 out.append(FetchedPage(u, SAMPLE))
         return out
 
-    res = fetch_toyoko(cfg, fetcher=fake)
+    res = fetch_toyoko(cfg, fetcher=fake, parties=[PARTY])
     assert len(calls[0]) == 2  # code 未設定ホテルは除外、2 日程分
     assert len(res.offers) == 2 and len(res.errors) == 1 and "timeout" in res.errors[0]
 
 
+def test_fetch_toyoko_covers_every_party(cfg):
+    cfg.toyoko_hotels = [HOTEL]
+    calls = []
+
+    def fake(urls, tcfg):
+        calls.append(urls)
+        return [FetchedPage(u, SAMPLE) for u in urls]
+
+    res = fetch_toyoko(cfg, fetcher=fake)
+    assert len(calls[0]) == 6  # 3 パターン × 2 日程
+    assert {o.party for o in res.offers} == {"親子2人1室", "4人1室", "4人2室"}
+    assert any("room=2" in u for u in calls[0])
+
+
 def test_fetch_toyoko_unparsed_dumps_html(cfg):
     cfg.toyoko_hotels = [HOTEL]
-    res = fetch_toyoko(cfg, fetcher=lambda urls, c: [FetchedPage(u, "<p>Loading</p>") for u in urls])
+    res = fetch_toyoko(cfg, fetcher=lambda urls, c: [FetchedPage(u, "<p>Loading</p>") for u in urls], parties=[PARTY])
     assert not res.offers and len(res.errors) == 2
     dumps = list((cfg.data_dir / "debug").glob("toyoko_00246_*.html"))
     assert len(dumps) == 2

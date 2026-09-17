@@ -22,6 +22,21 @@ class Stay:
         return f"{self.checkin.month}/{self.checkin.day}-{self.checkout.month}/{self.checkout.day}({self.nights}泊)"
 
 
+@dataclass(frozen=True)
+class Party:
+    """人数パターン（誰が何室で泊まるか）。"""
+
+    label: str
+    adults: int = 1
+    infants_no_meal_no_bed: int = 0  # 幼児・食事なし布団なし（添い寝）
+    rooms: int = 1
+    instant_price_per_night: int | None = None  # この人数での「即」しきい値（1泊・全室合計）
+
+    @property
+    def people(self) -> int:
+        return self.adults + self.infants_no_meal_no_bed
+
+
 @dataclass
 class Offer:
     """空室 1 件（宿 × プラン × 日程）。"""
@@ -31,6 +46,7 @@ class Offer:
     hotel_name: str
     area_label: str
     tier: int
+    party: str  # 人数パターンのラベル
     checkin: str  # YYYY-MM-DD
     checkout: str  # YYYY-MM-DD
     nights: int
@@ -46,7 +62,7 @@ class Offer:
 
     @property
     def key(self) -> str:
-        return f"{self.source}:{self.hotel_id}:{self.plan_id}:{self.checkin}:{self.checkout}"
+        return f"{self.source}:{self.hotel_id}:{self.plan_id}:{self.party}:{self.checkin}:{self.checkout}"
 
     @property
     def price_per_night(self) -> int | None:
@@ -65,6 +81,7 @@ class Offer:
         d = dict(d)
         d.pop("key", None)
         d.pop("price_per_night", None)
+        d.setdefault("party", "")  # 旧 state.json 互換
         return cls(**d)
 
 

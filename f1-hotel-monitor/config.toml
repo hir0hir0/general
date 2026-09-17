@@ -5,13 +5,35 @@
 # チェックアウト固定、チェックインは複数（4/8〜11 の3泊 と 4/9〜11 の2泊）
 checkout = "2027-04-11"
 checkins = ["2027-04-08", "2027-04-09"]
+
+# 人数パターン。すべてのパターン × 日程 × エリアで検索し、通知は別々に出す。
+#   adults                 大人の人数（合計）
+#   infants_no_meal_no_bed 幼児・食事なし布団なし＝添い寝（楽天 infantWithoutMBNum）
+#   rooms                  部屋数
+#   instant_price_per_night 1泊（全室合計）が この額以下なら「即」。未指定なら [thresholds] の値
+[[stay.parties]]
+label = "親子2人1室"
 adults = 1
-# 幼児（食事なし・布団なし＝添い寝）。楽天API の infantWithoutMBNum に対応
 infants_no_meal_no_bed = 1
 rooms = 1
+instant_price_per_night = 25000
+
+[[stay.parties]]
+label = "4人1室"          # 大人3（本人＋祖父母）＋4歳児1
+adults = 3
+infants_no_meal_no_bed = 1
+rooms = 1
+instant_price_per_night = 60000
+
+[[stay.parties]]
+label = "4人2室"          # 同じ4人を2部屋に分ける
+adults = 3
+infants_no_meal_no_bed = 1
+rooms = 2
+instant_price_per_night = 60000
 
 [thresholds]
-# 1泊あたり この金額以下なら「即」、超えたら「参考」
+# 人数パターンで instant_price_per_night を指定しない場合の既定値（1泊あたり）
 instant_price_per_night = 25000
 
 [schedule]
@@ -35,7 +57,7 @@ message = "ルートイン鈴鹿レース日 特別販売は例年 1月中旬 14
 # ---------------------------------------------------------------------------
 [rakuten]
 hits = 30            # 1 ページ最大 30
-max_pages = 5        # エリア×日程あたりの最大ページ数
+max_pages = 5        # エリア×日程×人数あたりの最大ページ数
 request_interval_sec = 1.05   # レート制限 1req/sec
 timeout_sec = 20
 
@@ -113,7 +135,7 @@ name_selectors = [".roomName", ".room-name", "h3", "h4", "[class*=name]"]
 price_selectors = [".price", "[class*=price]", "[class*=charge]"]
 soldout_keywords = ["満室", "空室なし", "ご予約いただけません", "×"]
 
-# 東横INN は小学生以下 1 名添い寝無料 → 大人1 で検索すればよい
+# 東横INN は小学生以下 1 名添い寝無料。人数パターンの adults / rooms が URL に展開される
 # code は公式サイトのホテルページ URL（/search/detail/<code>/ など）から控える
 [[toyoko.hotels]]
 code = "00000"          # TODO: 実 URL から控える
@@ -134,4 +156,4 @@ tier = 1
 walk_minutes_max = 5
 breakfast_start_max = "06:30"
 bath_keywords = ["大浴場", "温泉", "露天"]
-family_room_keywords = ["ファミリー", "ツイン", "和室", "和洋室", "トリプル"]
+family_room_keywords = ["ファミリー", "和洋室", "和室", "コネクティング", "フォース", "4名", "４名", "トリプル", "ツイン"]

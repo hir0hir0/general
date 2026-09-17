@@ -43,8 +43,8 @@ def render_table(rows: list[list[str]], headers: list[str], right_cols: set[int]
 
 
 def offers_table(offers: Iterable[Offer], cfg: Config, max_plan: int = 34) -> str:
-    scored = [(o, score_offer(o, cfg.scoring, cfg.instant_price_per_night)) for o in offers]
-    scored.sort(key=lambda t: sort_key(*t))
+    scored = [(o, score_offer(o, cfg.scoring, cfg.threshold_for(o))) for o in offers]
+    scored.sort(key=lambda t: (t[0].party, *sort_key(*t)))
     if not scored:
         return "(空室なし)"
     rows: list[list[str]] = []
@@ -52,6 +52,7 @@ def offers_table(offers: Iterable[Offer], cfg: Config, max_plan: int = 34) -> st
         rows.append(
             [
                 s.priority,
+                _cut(o.party, 12),
                 str(o.tier),
                 o.source,
                 _cut(o.area_label, 16),
@@ -63,15 +64,19 @@ def offers_table(offers: Iterable[Offer], cfg: Config, max_plan: int = 34) -> st
                 ",".join(s.bonuses),
             ]
         )
-    headers = ["判定", "T", "src", "エリア", "宿", "日程", "部屋/プラン", "合計", "/泊", "加点"]
-    return render_table(rows, headers, right_cols={7, 8})
+    headers = ["判定", "人数", "T", "src", "エリア", "宿", "日程", "部屋/プラン", "合計", "/泊", "加点"]
+    return render_table(rows, headers, right_cols={8, 9})
 
 
 def summary_line(offers: list[Offer]) -> str:
     by_src: dict[str, int] = {}
+    by_party: dict[str, int] = {}
     hotels: set[str] = set()
     for o in offers:
         by_src[o.source] = by_src.get(o.source, 0) + 1
+        by_party[o.party] = by_party.get(o.party, 0) + 1
         hotels.add(f"{o.source}:{o.hotel_id}")
     parts = ", ".join(f"{k}={v}" for k, v in sorted(by_src.items()))
-    return f"空室プラン {len(offers)} 件 / 宿 {len(hotels)} 軒 ({parts or 'なし'})"
+    pp = " / ".join(f"{k}: {v}件" for k, v in sorted(by_party.items())) if by_party else ""
+    line = f"空室プラン {len(offers)} 件 / 宿 {len(hotels)} 軒 ({parts or 'なし'})"
+    return line + ("\n  " + pp if pp else "")

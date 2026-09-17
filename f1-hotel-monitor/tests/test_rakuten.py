@@ -4,7 +4,7 @@ import json
 import pytest
 
 from f1hotel.config import RakutenArea
-from f1hotel.models import Stay
+from f1hotel.models import Party, Stay
 from f1hotel.rakuten import (
     RakutenClient,
     RakutenError,
@@ -159,11 +159,26 @@ def test_resolve_targets_detail_split_and_tier_dedupe():
 def test_build_vacant_params(cfg):
     stay = Stay(dt.date(2027, 4, 9), dt.date(2027, 4, 11))
     t = SearchTarget(1, "鈴鹿", "mie", "kuwana", "A", "鈴鹿・白子")
-    p = build_vacant_params(cfg, stay, t, 2)
+    p = build_vacant_params(cfg, stay, t, 2, cfg.parties[0])
     assert p["checkinDate"] == "2027-04-09" and p["checkoutDate"] == "2027-04-11"
-    assert p["adultNum"] == 1 and p["infantWithoutMBNum"] == 1
+    assert p["adultNum"] == 1 and p["infantWithoutMBNum"] == 1 and p["roomNum"] == 1
     assert p["middleClassCode"] == "mie" and p["smallClassCode"] == "kuwana" and p["detailClassCode"] == "A"
     assert p["page"] == 2 and p["hits"] == 30 and p["responseType"] == "large"
+
+
+def test_config_has_four_person_parties(cfg):
+    labels = [p.label for p in cfg.parties]
+    assert labels == ["親子2人1室", "4人1室", "4人2室"]
+    four1, four2 = cfg.parties[1], cfg.parties[2]
+    assert four1.adults == 3 and four1.infants_no_meal_no_bed == 1 and four1.rooms == 1
+    assert four2.rooms == 2 and four2.people == 4
+
+
+def test_build_vacant_params_four_people_two_rooms(cfg):
+    stay = Stay(dt.date(2027, 4, 8), dt.date(2027, 4, 11))
+    t = SearchTarget(1, "鈴鹿", "mie", "kuwana", "A", "鈴鹿・白子")
+    p = build_vacant_params(cfg, stay, t, 1, cfg.parties[2])
+    assert p["adultNum"] == 3 and p["roomNum"] == 2 and p["infantWithoutMBNum"] == 1
 
 
 def vacant_payload(hotel_no=1234, total=36000, page=1, page_count=1):
@@ -217,12 +232,14 @@ def vacant_payload(hotel_no=1234, total=36000, page=1, page_count=1):
 def test_parse_vacant_response():
     stay = Stay(dt.date(2027, 4, 9), dt.date(2027, 4, 11))
     t = SearchTarget(1, "鈴鹿・四日市", "mie", "kuwana", "A", "鈴鹿・白子")
-    offers = parse_vacant_response(vacant_payload(), stay, t)
+    party = Party("親子2人1室", adults=1, infants_no_meal_no_bed=1, rooms=1)
+    offers = parse_vacant_response(vacant_payload(), stay, t, party)
     assert len(offers) == 2
     o = offers[0]
     assert o.hotel_id == "1234" and o.plan_id == "555:twn" and o.total_price == 36000 and o.price_per_night == 18000
     assert o.url.endswith("/reserve/1234") and o.tier == 1 and "鈴鹿・白子" in o.area_label
-    assert o.key == "rakuten:1234:555:twn:2027-04-09:2027-04-11"
+    assert o.key == "rakuten:1234:555:twn:親子2人1室:2027-04-09:2027-04-11"
+    assert o.party == "親子2人1室"
     # total が 0 の場合は rakutenCharge の合計にフォールバック
     assert offers[1].total_price == 24000 and offers[1].url.endswith("/plan/1234")
     assert offers[1].extra["breakfast"] is True
@@ -286,7 +303,7 @@ def test_fetch_rakuten_pagination_and_dedupe(cfg):
         ]
     )
     c = RakutenClient("id", "pk_x", interval_sec=0, session=sess, sleep=lambda s: None)
-    res = fetch_rakuten(cfg, c, [t], [stay])
+    res = fetch_rakuten(cfg, c, [t], [stay], [cfg.parties[0]])
     assert res.ok and len(res.offers) == 2
     assert [p["page"] for _, p in sess.calls] == [1, 2]
 
@@ -296,8 +313,19 @@ def test_fetch_rakuten_records_error_and_continues(cfg):
     t = SearchTarget(1, "鈴鹿", "mie", "kuwana", None, "桑名・四日市")
     sess = FakeSession([(400, {"error": "wrong_parameter"}), (200, vacant_payload())])
     c = RakutenClient("id", "pk_x", interval_sec=0, session=sess, sleep=lambda s: None)
-    res = fetch_rakuten(cfg, c, [t], stays)
+    res = fetch_rakuten(cfg, c, [t], stays, [cfg.parties[0]])
     assert len(res.errors) == 1 and len(res.offers) == 2 and not res.ok
+
+
+def test_fetch_rakuten_covers_every_party(cfg):
+    stay = Stay(dt.date(2027, 4, 9), dt.date(2027, 4, 11))
+    t = SearchTarget(1, "鈴鹿", "mie", "kuwana", "A", "鈴鹿・白子")
+    sess = FakeSession([(200, vacant_payload())] * 3)
+    c = RakutenClient("id", "pk_x", interval_sec=0, session=sess, sleep=lambda s: None)
+    res = fetch_rakuten(cfg, c, [t], [stay])
+    assert {o.party for o in res.offers} == {"親子2人1室", "4人1室", "4人2室"}
+    assert [(p["adultNum"], p["roomNum"]) for _, p in sess.calls] == [(1, 1), (3, 1), (3, 2)]
+    assert len(res.offers) == 6  # 3 パターン × 2 プラン
 
 
 def test_area_cache(tmp_path):

@@ -14,7 +14,7 @@ try:
 except ImportError:  # Python < 3.11（Synology 公式 Python 3.9 など）
     import tomli as tomllib  # type: ignore[no-redef]
 
-from .models import Stay
+from .models import Offer, Party, Stay
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.toml"
@@ -42,9 +42,7 @@ class ToyokoHotel:
 class Config:
     raw: dict[str, Any]
     stays: list[Stay]
-    adults: int
-    infants_no_meal_no_bed: int
-    rooms: int
+    parties: list[Party]
     instant_price_per_night: int
     daily_times: list[str]
     dense_windows: list[tuple[dt.date, dt.date]]
@@ -80,6 +78,16 @@ class Config:
     def scoring(self) -> dict[str, Any]:
         return self.raw.get("scoring", {})
 
+    def party(self, label: str) -> Party | None:
+        return next((p for p in self.parties if p.label == label), None)
+
+    def threshold_for(self, offer: "Offer") -> int:
+        """その空室の人数パターンに応じた「即」しきい値（1泊あたり）。"""
+        p = self.party(offer.party)
+        if p and p.instant_price_per_night:
+            return p.instant_price_per_night
+        return self.instant_price_per_night
+
     def is_dense_day(self, day: dt.date) -> bool:
         return any(a <= day <= b for a, b in self.dense_windows)
 
@@ -102,6 +110,17 @@ def load_config(path: Path | str | None = None, env_path: Path | str | None = No
         if s.nights <= 0:
             raise ValueError(f"invalid stay: {s}")
 
+    parties = [Party(**p) for p in stay.get("parties", [])]
+    if not parties:  # 旧形式（stay.adults など）からの互換
+        parties = [
+            Party(
+                label=stay.get("party_label", "既定"),
+                adults=int(stay.get("adults", 1)),
+                infants_no_meal_no_bed=int(stay.get("infants_no_meal_no_bed", 0)),
+                rooms=int(stay.get("rooms", 1)),
+            )
+        ]
+
     sched = raw.get("schedule", {})
     dense = [(_parse_date(a), _parse_date(b)) for a, b in sched.get("dense_windows", [])]
 
@@ -113,9 +132,7 @@ def load_config(path: Path | str | None = None, env_path: Path | str | None = No
     return Config(
         raw=raw,
         stays=stays,
-        adults=int(stay.get("adults", 1)),
-        infants_no_meal_no_bed=int(stay.get("infants_no_meal_no_bed", 0)),
-        rooms=int(stay.get("rooms", 1)),
+        parties=parties,
         instant_price_per_night=int(raw.get("thresholds", {}).get("instant_price_per_night", 25000)),
         daily_times=list(sched.get("daily_times", ["09:00", "21:00"])),
         dense_windows=dense,

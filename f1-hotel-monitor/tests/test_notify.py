@@ -20,6 +20,7 @@ def mk(i, price, tier=1, source="rakuten"):
         hotel_name=f"宿{i}",
         area_label="鈴鹿",
         tier=tier,
+        party="親子2人1室",
         checkin="2027-04-09",
         checkout="2027-04-11",
         nights=2,

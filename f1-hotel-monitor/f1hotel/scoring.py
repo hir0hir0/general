@@ -72,6 +72,7 @@ def score_offer(offer: Offer, scoring_cfg: dict[str, Any], instant_price_per_nig
     elif offer.extra.get("breakfast"):
         bonuses.append("朝食付")
 
+    # 4 人などでは定員の大きい部屋が重要
     room_text = offer.room_name + " " + offer.plan_name
     fam = [k for k in scoring_cfg.get("family_room_keywords", []) if k in room_text]
     if fam:
