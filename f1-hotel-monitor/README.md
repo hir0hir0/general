@@ -126,6 +126,23 @@ DSM 7.1 ではパッケージ名が **Docker**（7.2 から Container Manager）
    初回は Chromium と依存ライブラリの導入で 3〜5 分かかる（`/data/pw-browsers` に保存され、次回以降は速い）
 6. 設定変更は File Station で `docker/f1-hotel-monitor/data/config.toml` を編集。コード更新はコンテナ再起動
 
+### B-3. DSM 7.1 で SSH から 1 行導入（レジストリのタグ取得が失敗する場合）
+
+DSM 7.1 の Docker GUI は古い Docker Hub API を使うため「レジストリをクエリできませんでした」が出ることがある。
+その場合は SSH から `docker run` で直接作るのが確実（compose 不要）。
+
+1. コントロールパネル > 端末と SNMP > **SSH サービスを有効にする**
+2. PC かスマホの SSH アプリで NAS に管理者ユーザーでログイン
+3. 次を 1 行で実行（値は自分のものに置き換え）
+
+```bash
+sudo RAKUTEN_APP_ID=xxx RAKUTEN_ACCESS_KEY=pk_xxx NTFY_TOPIC=yyy F1HOTEL_BRANCH=claude/quirky-ride-2rg4ew \
+  bash -c 'curl -fsSL https://raw.githubusercontent.com/hir0hir0/general/claude/quirky-ride-2rg4ew/f1-hotel-monitor/deploy/synology-docker-run.sh | bash'
+```
+
+4. `docker logs -f f1-hotel-monitor` で確認。以後は DSM の Docker GUI からも停止・再起動できる
+5. データは `/volume1/docker/f1-hotel-monitor/data`。終わったら SSH は無効に戻してよい
+
 ### B''. Synology NAS・Docker 非対応機種（タスクスケジューラ＋公式 Python）
 
 パッケージセンターに Container Manager が出ない機種（J シリーズなど）向け。楽天のみ（東横INN は対象外）。
