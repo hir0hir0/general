@@ -92,6 +92,26 @@ QuickConnect で DSM に入り、Container Manager の「プロジェクト」�
 コンテナの「ターミナル」タブから `python /app/monitor.py --config /data/config.toml areas --middle mie`
 のように手動コマンドも実行できる。
 
+### B''. Synology NAS・Docker 非対応機種（タスクスケジューラ＋公式 Python）
+
+パッケージセンターに Container Manager が出ない機種（J シリーズなど）向け。楽天のみ（東横INN は対象外）。
+
+1. パッケージセンターで Synology 公式の **Python 3.9 以上** をインストール
+2. コントロールパネル > タスクスケジューラ > 作成 > 予約タスク > **ユーザー指定のスクリプト**
+   - ユーザー: root、スケジュール: 毎日 09:00（同じものを 21:00 にももう 1 つ）
+   - 実行コマンドに次を貼り、値を自分のものにする:
+
+```bash
+export RAKUTEN_APP_ID=楽天のapplicationId
+export NTFY_TOPIC=ntfyのトピック名
+export NOTIFY_CHANNELS=ntfy
+export F1HOTEL_BRANCH=claude/quirky-ride-2rg4ew
+curl -fsSL https://raw.githubusercontent.com/hir0hir0/general/${F1HOTEL_BRANCH}/f1-hotel-monitor/deploy/synology-taskscheduler.sh | bash
+```
+
+3. タスクを選んで「実行」し、「タスク設定 > 出力結果を保存」のログで表が出ていることを確認
+4. 配置先は `/volume1/f1-hotel-monitor`。設定は File Station で `config.toml` を編集（`data/` と `config.toml` は更新時も保持）
+
 ### B'. Synology NAS・SSH で導入（Container Manager）
 
 DSM 7 で「Container Manager」をインストールし、SSH を有効にして（コントロールパネル > 端末と SNMP）、
