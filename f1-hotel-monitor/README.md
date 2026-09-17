@@ -74,7 +74,25 @@ python monitor.py run --notify
 `deploy/crontab.example` を参照。9:00 / 21:00 に `run --notify`、毎時 5 分に `run --notify --only-if-dense`。
 `--only-if-dense` は `config.toml` の `dense_windows`（スーパーホテル開放 11/1、ルートイン特別販売の 1 月中旬）に該当する日だけ動く。
 
-### B. Synology NAS（Container Manager）
+### B. Synology NAS・ブラウザだけで導入（SSH・PC 不要）
+
+QuickConnect で DSM に入り、Container Manager の「プロジェクト」に compose を貼り付ける方式。
+コードはコンテナ起動時に GitHub から取得するので、NAS にファイルを置く必要がない。
+
+1. パッケージセンターで **Container Manager** をインストール
+2. Container Manager > プロジェクト > **作成**
+   - プロジェクト名: `f1-hotel-monitor`
+   - パス: `/docker/f1-hotel-monitor`（新規作成）
+   - ソース: 「docker-compose.yml を作成」を選び、[`deploy/docker-compose.synology.yml`](deploy/docker-compose.synology.yml) の内容を貼り付ける
+3. 貼り付けた中の `RAKUTEN_APP_ID` と `NTFY_TOPIC` を自分の値にして「次へ」→「完了」
+4. 起動後、コンテナ `f1-hotel-monitor` の **ログ** で「[boot] fetching branch」→ 表出力が出れば OK
+5. 設定変更は File Station で `/docker/f1-hotel-monitor/data/config.toml` を編集（次回実行時に反映）
+6. コード更新はコンテナを再起動するだけ（起動時に再取得）。`F1HOTEL_BRANCH` で取得ブランチを指定
+
+コンテナの「ターミナル」タブから `python /app/monitor.py --config /data/config.toml areas --middle mie`
+のように手動コマンドも実行できる。
+
+### B'. Synology NAS・SSH で導入（Container Manager）
 
 DSM 7 で「Container Manager」をインストールし、SSH を有効にして（コントロールパネル > 端末と SNMP）、
 管理者ユーザーで SSH ログイン後に 1 行で導入できる:
