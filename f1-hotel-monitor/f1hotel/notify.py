@@ -25,6 +25,19 @@ log = logging.getLogger(__name__)
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 LINE_MAX_TEXT = 4800
+NTFY_MAX_BODY_BYTES = 2500  # ntfy は 4096 バイト超で 413。JSON 全体で収まる値にする
+NTFY_MAX_TITLE_BYTES = 200
+MAX_NEW_LISTED = 12  # 本文に明細を出す件数（残りは「…他 N 件」）
+MAX_PRICE_LISTED = 8
+MAX_GONE_LISTED = 3
+
+
+def clip_bytes(text: str, limit: int) -> str:
+    """UTF-8 バイト数で切り詰める（文字数だと日本語で 3 倍になり 413 になる）。"""
+    b = text.encode("utf-8")
+    if len(b) <= limit:
+        return text
+    return b[:limit].decode("utf-8", "ignore").rstrip() + "\n…（省略）"
 
 
 class NotifyError(RuntimeError):
@@ -59,20 +72,28 @@ def build_diff_message(diff: Diff, cfg: Config) -> tuple[str, str, str | None]:
 
     parts: list[str] = []
     if scored_new:
-        parts.append(f"■ 新規空き {len(scored_new)}件（即 {instant}件）")
-        parts.extend(format_offer(o, s) for o, s in scored_new)
+        by_party: dict[str, int] = {}
+        for o, _ in scored_new:
+            by_party[o.party] = by_party.get(o.party, 0) + 1
+        summary = " / ".join(f"{k} {v}件" for k, v in sorted(by_party.items()))
+        parts.append(f"■ 新規空き {len(scored_new)}件（即 {instant}件）\n  {summary}")
+        parts.extend(format_offer(o, s) for o, s in scored_new[:MAX_NEW_LISTED])
+        if len(scored_new) > MAX_NEW_LISTED:
+            parts.append(f"…他 {len(scored_new) - MAX_NEW_LISTED} 件（表は NAS のログ参照）")
     if diff.price_changed:
         parts.append(f"■ 料金変動 {len(diff.price_changed)}件")
-        for old, new in sorted(diff.price_changed, key=lambda t: t[1].tier):
+        for old, new in sorted(diff.price_changed, key=lambda t: t[1].tier)[:MAX_PRICE_LISTED]:
             parts.append(
                 f"・[{new.party}] {new.hotel_name} {new.checkin[5:]}〜 {new.room_name}: "
                 f"{fmt_yen(old.total_price)} → {fmt_yen(new.total_price)}\n  {new.url}"
             )
+        if len(diff.price_changed) > MAX_PRICE_LISTED:
+            parts.append(f"…他 {len(diff.price_changed) - MAX_PRICE_LISTED} 件")
     if diff.gone:
         parts.append(f"■ 消滅 {len(diff.gone)}件")
-        parts.extend(f"・[{o.party}] {o.hotel_name} {o.checkin[5:]}〜 {o.room_name}" for o in diff.gone[:20])
-        if len(diff.gone) > 20:
-            parts.append(f"  …他 {len(diff.gone) - 20} 件")
+        parts.extend(f"・[{o.party}] {o.hotel_name} {o.checkin[5:]}〜 {o.room_name}" for o in diff.gone[:MAX_GONE_LISTED])
+        if len(diff.gone) > MAX_GONE_LISTED:
+            parts.append(f"  …他 {len(diff.gone) - MAX_GONE_LISTED} 件")
 
     if not parts:
         return "", "", None
@@ -129,8 +150,8 @@ class Notifier:
             topic = os.environ.get("NTFY_ERROR_TOPIC") or f"{topic}-errors"
         payload: dict[str, Any] = {
             "topic": topic,
-            "title": title,
-            "message": body[:4000],
+            "title": clip_bytes(title, NTFY_MAX_TITLE_BYTES),
+            "message": clip_bytes(body, NTFY_MAX_BODY_BYTES),
             "priority": 4 if error else priority,
             "tags": ["warning"] if error else ["hotel"],
         }
@@ -140,7 +161,9 @@ class Notifier:
         token = os.environ.get("NTFY_TOKEN")
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        r = self.session.post(server, data=json.dumps(payload).encode("utf-8"), headers=headers, timeout=20)
+        body_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")  # \uXXXX 展開を避けて小さくする
+        headers["Content-Type"] = "application/json; charset=utf-8"
+        r = self.session.post(server, data=body_bytes, headers=headers, timeout=20)
         r.raise_for_status()
 
     # --- LINE Messaging API ------------------------------------------------

@@ -3,7 +3,9 @@ import json
 
 from f1hotel.models import Offer
 from f1hotel.notify import (
+    MAX_NEW_LISTED,
     Notifier,
+    clip_bytes,
     build_diff_message,
     due_reminders,
     mark_error_notified,
@@ -60,6 +62,33 @@ class Sess:
     def post(self, url, **kw):
         self.posts.append((url, kw))
         return Resp(self.status)
+
+
+def test_clip_bytes_counts_utf8():
+    assert clip_bytes("あいう", 100) == "あいう"
+    out = clip_bytes("あ" * 100, 30)
+    assert len(out.encode("utf-8")) <= 30 + len("\n…（省略）".encode("utf-8"))
+    assert out.endswith("（省略）")
+
+
+def test_large_diff_body_fits_ntfy_limit(cfg, monkeypatch):
+    many = [mk(i, 30000 + i, tier=(i % 4) + 1) for i in range(200)]
+    for i, o in enumerate(many):
+        o.party = ["親子2人1室", "4人1室", "4人2室"][i % 3]
+        o.hotel_name = "とても長いホテル名前テスト施設" * 2
+    d = Diff(new=many, gone=many[:150])
+    title, body, _ = build_diff_message(d, cfg)
+    assert "新規空き 200件" in body and "親子2人1室" in body.split("\n")[1]
+    assert body.count("【") == MAX_NEW_LISTED
+    assert "…他 188 件" in body and "消滅 150件" in body
+
+    monkeypatch.setenv("NTFY_TOPIC", "t")
+    s = Sess()
+    assert Notifier(channels=["ntfy"], session=s).send(title, body) == []
+    sent = s.posts[0][1]["data"]
+    assert len(sent) < 4096  # 実際に送るバイト列が ntfy の上限を超えない
+    payload = json.loads(sent)
+    assert len(payload["message"].encode("utf-8")) <= 2600
 
 
 def test_ntfy_payload(monkeypatch):

@@ -24,6 +24,7 @@ from f1hotel.config import Config, load_config
 from f1hotel.models import Offer, SourceResult
 from f1hotel.notify import (
     Notifier,
+    clip_bytes,
     build_diff_message,
     due_reminders,
     mark_error_notified,
@@ -157,7 +158,7 @@ def cmd_run(args: argparse.Namespace, cfg: Config) -> int:
     # --- エラー通知（1 日 1 回） ------------------------------------------
     if errors and args.notify:
         if should_notify_error(cfg.data_dir, today):
-            fails = notifier.send("⚠ F1鈴鹿 宿監視: エラー", "\n".join(errors)[:3500], error=True)
+            fails = notifier.send("⚠ F1鈴鹿 宿監視: エラー", clip_bytes("\n".join(errors), 3000), error=True)
             if not fails and not args.dry_run_notify:
                 mark_error_notified(cfg.data_dir, today)
         else:
