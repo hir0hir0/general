@@ -182,6 +182,18 @@ def parse_area_tree(raw: dict[str, Any]) -> list[MiddleClass]:
     return out
 
 
+def dump_tree(tree: list[MiddleClass]) -> str:
+    """都道府県 > 地区 > 詳細地区 をテキスト化（config 調整用に /data へ書き出す）。"""
+    lines = [describe_tree(tree, limit=100), ""]
+    for m in tree:
+        lines.append(f"{m.code}\t{m.name}")
+        for sm in m.smalls:
+            lines.append(f"  {sm.code}\t{sm.name}")
+            for code, name in sm.details:
+                lines.append(f"    {code}\t{name}")
+    return "\n".join(lines) + "\n"
+
+
 def describe_tree(tree: list[MiddleClass], limit: int = 12) -> str:
     """解析結果の要約（設定が合わないときの診断用）。"""
     if not tree:
@@ -238,7 +250,9 @@ def resolve_targets(tree: list[MiddleClass], areas: list[RakutenArea]) -> tuple[
     for area in areas:
         mid = by_middle.get(area.middle)
         if mid is None:
-            warnings.append(f"[{area.label}] middleClassCode '{area.middle}' が見つかりません")
+            near = [m.code for m in tree if area.middle[:2] in m.code or m.code[:2] == area.middle[:2]]
+            hint = f" 近い候補: {', '.join(near[:5])}" if near else f" 全 {len(tree)} 件中になし"
+            warnings.append(f"[{area.label}] middleClassCode '{area.middle}' が見つかりません.{hint}")
             continue
         matched_smalls = [s for s in mid.smalls if any(k in s.name for k in area.small_keywords)]
         if not matched_smalls:

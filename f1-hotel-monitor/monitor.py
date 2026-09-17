@@ -34,6 +34,7 @@ from f1hotel.rakuten import (
     RakutenClient,
     RakutenError,
     describe_tree,
+    dump_tree,
     fetch_rakuten,
     load_area_tree,
     resolve_targets,
@@ -66,6 +67,10 @@ def collect(cfg: Config, sources: list[str]) -> list[SourceResult]:
                 timeout_sec=float(cfg.rakuten.get("timeout_sec", 20)),
             )
             tree = load_area_tree(client, cfg.data_dir / "rakuten_areas.json")
+            try:
+                (cfg.data_dir / "rakuten_areas.txt").write_text(dump_tree(tree), encoding="utf-8")
+            except OSError as e:
+                log.warning("エリア一覧の書き出しに失敗: %s", e)
             targets, warns = resolve_targets(tree, cfg.rakuten_areas)
             for w in warns:
                 log.warning("rakuten area: %s", w)
@@ -82,6 +87,8 @@ def collect(cfg: Config, sources: list[str]) -> list[SourceResult]:
                 results.append(SourceResult("rakuten", [], [msg]))
             else:
                 log.info("rakuten: %d targets × %d stays", len(targets), len(cfg.stays))
+                for t in targets:
+                    log.info("  target tier%d %s/%s/%s %s", t.tier, t.middle, t.small, t.detail or "-", t.name)
                 results.append(fetch_rakuten(cfg, client, targets))
         except (RakutenError, Exception) as e:  # noqa: BLE001
             log.exception("rakuten failed")
