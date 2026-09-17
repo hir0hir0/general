@@ -89,7 +89,8 @@ else:
             pass
     if current == new_text:
         shutil.copy(shipped_repo, shipped_marker)
-    elif current == previous or "stay.parties" not in current:
+    elif current == previous or not os.path.exists(shipped_marker) or "stay.parties" not in current:
+        # 目印が無い＝以前の版から上げた直後。バックアップを取って最新版にする
         import datetime
 
         bak = cfg + "." + datetime.datetime.now().strftime("%Y%m%d%H%M%S") + ".bak"
