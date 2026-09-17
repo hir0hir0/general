@@ -97,6 +97,7 @@ def test_resolve_targets_detail_split_and_tier_dedupe():
         RakutenArea(2, "桑名・湯の山", "mie", ["桑名", "湯の山"], ["桑名", "湯の山"]),
         RakutenArea(3, "名古屋", "aichi", ["名古屋"], ["名古屋駅", "金山", "栄"]),
         RakutenArea(4, "岐阜", "gifu", ["岐阜"], []),
+        RakutenArea(4, "桑名全部", "mie", ["桑名"], ["該当なし"]),  # detail 不一致 → 全 detail
     ]
     targets, warns = resolve_targets(tree, areas)
     keys = [(t.tier, t.middle, t.small, t.detail) for t in targets]
@@ -110,6 +111,9 @@ def test_resolve_targets_detail_split_and_tier_dedupe():
     assert (3, "aichi", "nagoya", "C") in keys
     assert (3, "aichi", "nagoya", "D") not in keys
     assert len(warns) == 1 and "gifu" in warns[0]
+    # 「桑名全部」は detail 不一致で kuwana の全 detail を候補にするが、既に tier1/2 で選ばれているので tier は変わらない
+    assert sum(1 for t in targets if t.small == "kuwana") == 4
+    assert all(t.tier <= 2 for t in targets if t.small == "kuwana")
     # 「津」keyword は「津・久居・美杉」のみ（他 small に津を含む名称がない）
     assert sum(1 for t in targets if t.small == "tsu") == 1
 
@@ -211,23 +215,27 @@ class FakeSession:
 def test_client_not_found_and_retry():
     sleeps = []
     sess = FakeSession([(429, {"error": "too_many_requests"}), (404, {"error": "not_found", "error_description": "x"})])
-    c = RakutenClient("id", interval_sec=0, session=sess, sleep=sleeps.append)
+    c = RakutenClient("id", "pk_x", interval_sec=0, session=sess, sleep=sleeps.append)
     assert c.get("http://x", {"a": 1}) is None
-    assert sess.calls[0][1]["applicationId"] == "id" and sess.calls[0][1]["format"] == "json"
+    assert sess.calls[0][1]["applicationId"] == "id" and sess.calls[0][1]["accessKey"] == "pk_x"
+    assert sess.calls[0][1]["format"] == "json"
+    assert sess.headers["Origin"] == "https://github.com"
     assert c.request_count == 2 and sleeps == [2.0]
     assert sess.headers["Referer"].startswith("https://github.com/")
 
 
 def test_client_raises_on_wrong_parameter():
     sess = FakeSession([(400, {"error": "wrong_parameter", "error_description": "checkinDate"})])
-    c = RakutenClient("id", interval_sec=0, session=sess, sleep=lambda s: None)
+    c = RakutenClient("id", "pk_x", interval_sec=0, session=sess, sleep=lambda s: None)
     with pytest.raises(RakutenError, match="wrong_parameter"):
         c.get("http://x", {})
 
 
-def test_client_requires_app_id():
+def test_client_requires_app_id_and_access_key():
     with pytest.raises(RakutenError):
         RakutenClient("")
+    with pytest.raises(RakutenError, match="ACCESS_KEY"):
+        RakutenClient("id", "")
 
 
 def test_fetch_rakuten_pagination_and_dedupe(cfg):
@@ -239,7 +247,7 @@ def test_fetch_rakuten_pagination_and_dedupe(cfg):
             (200, vacant_payload(hotel_no=1, page=2, page_count=2)),  # 重複 → dedupe
         ]
     )
-    c = RakutenClient("id", interval_sec=0, session=sess, sleep=lambda s: None)
+    c = RakutenClient("id", "pk_x", interval_sec=0, session=sess, sleep=lambda s: None)
     res = fetch_rakuten(cfg, c, [t], [stay])
     assert res.ok and len(res.offers) == 2
     assert [p["page"] for _, p in sess.calls] == [1, 2]
@@ -249,14 +257,14 @@ def test_fetch_rakuten_records_error_and_continues(cfg):
     stays = [Stay(dt.date(2027, 4, 8), dt.date(2027, 4, 11)), Stay(dt.date(2027, 4, 9), dt.date(2027, 4, 11))]
     t = SearchTarget(1, "鈴鹿", "mie", "kuwana", None, "桑名・四日市")
     sess = FakeSession([(400, {"error": "wrong_parameter"}), (200, vacant_payload())])
-    c = RakutenClient("id", interval_sec=0, session=sess, sleep=lambda s: None)
+    c = RakutenClient("id", "pk_x", interval_sec=0, session=sess, sleep=lambda s: None)
     res = fetch_rakuten(cfg, c, [t], stays)
     assert len(res.errors) == 1 and len(res.offers) == 2 and not res.ok
 
 
 def test_area_cache(tmp_path):
     sess = FakeSession([(200, AREA_RAW)])
-    c = RakutenClient("id", interval_sec=0, session=sess, sleep=lambda s: None)
+    c = RakutenClient("id", "pk_x", interval_sec=0, session=sess, sleep=lambda s: None)
     path = tmp_path / "areas.json"
     tree = load_area_tree(c, path)
     assert tree[0].code == "mie" and path.exists()

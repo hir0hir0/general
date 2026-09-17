@@ -54,6 +54,7 @@ def collect(cfg: Config, sources: list[str]) -> list[SourceResult]:
         try:
             client = RakutenClient(
                 cfg.rakuten_app_id or "",
+                cfg.rakuten_access_key or "",
                 interval_sec=float(cfg.rakuten.get("request_interval_sec", 1.05)),
                 timeout_sec=float(cfg.rakuten.get("timeout_sec", 20)),
             )
@@ -145,7 +146,7 @@ def cmd_run(args: argparse.Namespace, cfg: Config) -> int:
 # areas
 # ---------------------------------------------------------------------------
 def cmd_areas(args: argparse.Namespace, cfg: Config) -> int:
-    client = RakutenClient(cfg.rakuten_app_id or "") if cfg.rakuten_app_id else None
+    client = RakutenClient(cfg.rakuten_app_id or "", cfg.rakuten_access_key or "") if cfg.rakuten_app_id else None
     tree = load_area_tree(client, cfg.data_dir / "rakuten_areas.json", force=args.refresh)
     middles = [m for m in tree if not args.middle or m.code == args.middle]
     if not middles:

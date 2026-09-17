@@ -60,6 +60,10 @@ class Config:
         return os.environ.get("RAKUTEN_APP_ID") or None
 
     @property
+    def rakuten_access_key(self) -> str | None:
+        return os.environ.get("RAKUTEN_ACCESS_KEY") or None
+
+    @property
     def notify_channels(self) -> list[str]:
         v = os.environ.get("NOTIFY_CHANNELS", "")
         return [c.strip() for c in v.split(",") if c.strip()]

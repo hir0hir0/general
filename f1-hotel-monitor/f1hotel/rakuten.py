@@ -3,6 +3,8 @@
 - レート制限 1 req/sec を守る（request_interval_sec）
 - 該当なしは HTTP 404 + error=not_found で返るので 0 件として扱う
 - エリアコードは GetAreaClass の名称にキーワード一致させて解決し、キャッシュする
+- 2026/2 新仕様: applicationId と accessKey の両方をクエリで送り、Referer/Origin ヘッダーに
+  アプリ登録「Allowed websites」のドメインを付ける（無いと 403）
 """
 from __future__ import annotations
 
@@ -10,6 +12,7 @@ import datetime as dt
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,8 +25,10 @@ from .models import Offer, SourceResult, Stay
 
 log = logging.getLogger(__name__)
 
-VACANT_URL = "https://app.rakuten.co.jp/services/api/Travel/VacantHotelSearch/20170426"
-AREA_URL = "https://app.rakuten.co.jp/services/api/Travel/GetAreaClass/20131024"
+# 2026/2 の仕様変更後の新エンドポイント（旧 app.rakuten.co.jp/services/api は 2026/5/14 停止）
+VACANT_URL = "https://openapi.rakuten.co.jp/engine/api/Travel/VacantHotelSearch/20170426"
+AREA_URL = "https://openapi.rakuten.co.jp/engine/api/Travel/GetAreaClass/20140210"
+DEFAULT_REFERER = "https://github.com/hir0hir0/general"
 AREA_CACHE_MAX_AGE_DAYS = 30
 
 
@@ -38,6 +43,7 @@ class RakutenClient:
     def __init__(
         self,
         app_id: str,
+        access_key: str = "",
         interval_sec: float = 1.05,
         timeout_sec: float = 20,
         session: requests.Session | None = None,
@@ -46,7 +52,17 @@ class RakutenClient:
     ):
         if not app_id:
             raise RakutenError("RAKUTEN_APP_ID が未設定です（.env を確認）")
+        if not access_key:
+            raise RakutenError("RAKUTEN_ACCESS_KEY が未設定です（楽天アプリ一覧の Access Key。2026/2 以降必須）")
         self.app_id = app_id
+        self.access_key = access_key
+        referer = os.environ.get("RAKUTEN_REFERER", DEFAULT_REFERER)
+        origin = re.match(r"https?://[^/]+", referer)
+        self.headers = {
+            "Referer": referer,
+            "Origin": origin.group(0) if origin else referer,
+            "User-Agent": "f1-hotel-monitor/0.1 (+" + referer + ")",
+        }
         self.interval = interval_sec
         self.timeout = timeout_sec
         self.session = session or requests.Session()
@@ -62,9 +78,8 @@ class RakutenClient:
 
     def get(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """GET して JSON を返す。該当なし（404 not_found）は None。"""
-        q = {"applicationId": self.app_id, "format": "json", **params}
-        # 楽天のアプリ登録「Allowed websites」に合わせ、Referer に登録済みドメインの URL を付ける
-        headers = {"Referer": os.environ.get("RAKUTEN_REFERER", "https://github.com/hir0hir0/general")}
+        q = {"applicationId": self.app_id, "accessKey": self.access_key, "format": "json", **params}
+        headers = self.headers
         backoff = 2.0
         for attempt in range(self.max_retries + 1):
             self._throttle()
@@ -210,6 +225,11 @@ def resolve_targets(tree: list[MiddleClass], areas: list[RakutenArea]) -> tuple[
                 for code, name in small.details:
                     if any(k in name for k in area.detail_keywords):
                         candidates.append(SearchTarget(area.tier, area.label, mid.code, small.code, code, name))
+            if not candidates and small.details:
+                # 新仕様では detailClassCode まで要求されるため、一致しなければ全 detail を対象にする
+                candidates.extend(
+                    SearchTarget(area.tier, area.label, mid.code, small.code, code, name) for code, name in small.details
+                )
             if not candidates:
                 candidates.append(SearchTarget(area.tier, area.label, mid.code, small.code, None, small.name))
             for t in candidates:

@@ -12,7 +12,8 @@
 #   3. 「実行」で 1 回試し、「タスク設定 > 出力結果を保存」を有効にしてログを確認
 #
 # 【貼り付け用】（値を自分のものに置き換える）
-#   export RAKUTEN_APP_ID=ここに楽天のapplicationId
+#   export RAKUTEN_APP_ID=ここに楽天のApplication ID
+#   export RAKUTEN_ACCESS_KEY=ここに楽天のAccess Key
 #   export NTFY_TOPIC=ここにntfyトピック名
 #   export NOTIFY_CHANNELS=ntfy
 #   export F1HOTEL_BRANCH=claude/quirky-ride-2rg4ew
@@ -75,6 +76,8 @@ if [ -x .venv/bin/python ]; then RUNPY=".venv/bin/python"; PIPOPT=""; else RUNPY
 if [ -n "${RAKUTEN_APP_ID:-}" ]; then
   {
     echo "RAKUTEN_APP_ID=${RAKUTEN_APP_ID}"
+    echo "RAKUTEN_ACCESS_KEY=${RAKUTEN_ACCESS_KEY:-}"
+    echo "RAKUTEN_REFERER=${RAKUTEN_REFERER:-https://github.com/hir0hir0/general}"
     echo "NOTIFY_CHANNELS=${NOTIFY_CHANNELS:-ntfy}"
     echo "NTFY_SERVER=${NTFY_SERVER:-https://ntfy.sh}"
     echo "NTFY_TOPIC=${NTFY_TOPIC:-}"

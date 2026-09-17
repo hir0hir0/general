@@ -21,12 +21,20 @@ cp .env.example .env                 # 秘密情報はここに
 chmod +x run.sh                      # cron 用ラッパー
 ```
 
-### 楽天トラベル API キー（applicationId）の取得
+### 楽天トラベル API キー（Application ID と Access Key）の取得
 
-1. https://webservice.rakuten.co.jp/ を開き、楽天 ID でログイン
-2. 「アプリID発行」→ アプリ名（例: `f1-hotel-monitor`）・アプリURL（自分のサイト等。なければ GitHub のリポジトリ URL でよい）を入力して発行
-3. 表示される **applicationId（20 桁前後の数字）** を `.env` の `RAKUTEN_APP_ID=` に貼る
-4. 無料。レート制限は 1 req/sec（本ツールは 1.05 秒間隔で守る）
+2026/2 に楽天ウェブサービスの仕様が変わり、**Application ID と Access Key の両方**が必要になった（旧 `app.rakuten.co.jp` は 2026/5/14 停止）。
+
+1. https://webservice.rakuten.co.jp/ を開き、楽天 ID でログイン → 「New App」
+2. フォーム入力
+   - Application name: 英数字のみ（例 `f1hotelmonitor`。ハイフン不可）
+   - Application URL: `https://github.com/hir0hir0/general`
+   - Allowed websites: 既定の 3 行に `github.com` を追加（ツールは Referer/Origin にこの URL を付けて呼ぶ）
+   - Purpose: 個人用の空室監視である旨を英語で。Expected QPS: `1`
+   - API Access Scopes: **Rakuten Travel API** のみ
+3. 「Your Applications」に出る **Application ID**（UUID 形式）と **Access Key**（目のアイコンで表示、`pk_` で始まる）を控える
+4. `.env` に `RAKUTEN_APP_ID=` と `RAKUTEN_ACCESS_KEY=` として設定（Docker の場合は環境変数）。Affiliate ID は不要
+5. 無料。レート制限は 1 req/sec（本ツールは 1.05 秒間隔で守る）
 
 ### 通知チャネル（`.env` の `NOTIFY_CHANNELS`）
 
