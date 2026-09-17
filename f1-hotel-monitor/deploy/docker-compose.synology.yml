@@ -23,6 +23,8 @@ services:
       F1HOTEL_BRANCH: claude/quirky-ride-2rg4ew
       # ---- ここから自分の値に書き換える ----
       RAKUTEN_APP_ID: ""
+      # 楽天アプリ登録の Allowed websites に入れたドメインの URL
+      RAKUTEN_REFERER: https://github.com/hir0hir0/general
       NOTIFY_CHANNELS: ntfy
       NTFY_SERVER: https://ntfy.sh
       NTFY_TOPIC: ""

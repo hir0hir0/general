@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,12 +63,14 @@ class RakutenClient:
     def get(self, url: str, params: dict[str, Any]) -> dict[str, Any] | None:
         """GET して JSON を返す。該当なし（404 not_found）は None。"""
         q = {"applicationId": self.app_id, "format": "json", **params}
+        # 楽天のアプリ登録「Allowed websites」に合わせ、Referer に登録済みドメインの URL を付ける
+        headers = {"Referer": os.environ.get("RAKUTEN_REFERER", "https://github.com/hir0hir0/general")}
         backoff = 2.0
         for attempt in range(self.max_retries + 1):
             self._throttle()
             self._last_call = time.monotonic()
             self.request_count += 1
-            resp = self.session.get(url, params=q, timeout=self.timeout)
+            resp = self.session.get(url, params=q, headers=headers, timeout=self.timeout)
             if resp.status_code == 200:
                 return resp.json()
             try:

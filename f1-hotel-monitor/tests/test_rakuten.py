@@ -201,8 +201,9 @@ class FakeSession:
         self.script = list(script)
         self.calls = []
 
-    def get(self, url, params=None, timeout=None):
+    def get(self, url, params=None, headers=None, timeout=None):
         self.calls.append((url, params))
+        self.headers = headers
         item = self.script.pop(0)
         return FakeResp(*item)
 
@@ -214,6 +215,7 @@ def test_client_not_found_and_retry():
     assert c.get("http://x", {"a": 1}) is None
     assert sess.calls[0][1]["applicationId"] == "id" and sess.calls[0][1]["format"] == "json"
     assert c.request_count == 2 and sleeps == [2.0]
+    assert sess.headers["Referer"].startswith("https://github.com/")
 
 
 def test_client_raises_on_wrong_parameter():
