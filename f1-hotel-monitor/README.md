@@ -74,7 +74,23 @@ python monitor.py run --notify
 `deploy/crontab.example` を参照。9:00 / 21:00 に `run --notify`、毎時 5 分に `run --notify --only-if-dense`。
 `--only-if-dense` は `config.toml` の `dense_windows`（スーパーホテル開放 11/1、ルートイン特別販売の 1 月中旬）に該当する日だけ動く。
 
-### B. Docker（内蔵スケジューラ常駐）
+### B. Synology NAS（Container Manager）
+
+DSM 7 で「Container Manager」をインストールし、SSH を有効にして（コントロールパネル > 端末と SNMP）、
+管理者ユーザーで SSH ログイン後に 1 行で導入できる:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hir0hir0/general/main/f1-hotel-monitor/deploy/synology-setup.sh | sudo bash
+```
+
+- 配置先は `/volume1/docker/f1-hotel-monitor`（`INSTALL_DIR=... sudo -E bash` で変更可）
+- 初回は `.env` を作って止まるので、`RAKUTEN_APP_ID` と `NTFY_TOPIC` を書いて同じコマンドを再実行する
+- 2 回目以降は通知テスト → 楽天エリア一覧の表示 → 常駐開始まで自動で進む
+- 更新時も同じコマンドでよい（`.env` / `config.toml` / `data/` は保持される）
+- ログ: `docker compose -f /volume1/docker/f1-hotel-monitor/deploy/docker-compose.yml logs -f`
+- Container Manager の GUI からも `f1-hotel-monitor` コンテナとして停止・再起動できる
+
+### C. Docker（内蔵スケジューラ常駐）
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d --build
