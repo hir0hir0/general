@@ -247,12 +247,15 @@ dry_run = true           # ← true の間は確定ボタンを押さず手前�
 sources = ["superhotel"] # 自動予約を許可するソース
 parties = ["4人2室", "親子2人1室"]   # このパターンのみ
 prefer_parties = ["4人2室", "親子2人1室"]
-max_total_price = 120000 # 合計がこれを超えたら実行しない（円）
+max_total_price = 150000 # 合計がこれを超えたら実行しない（円）。前日まで無料なので押さえ優先
 timeout_sec = 15
 required_guest_fields = ["name", "kana", "phone", "email"]
 
 # 無料キャンセルを確認できるプランだけ予約する（確認できなければ実行しない）
 require_free_cancel = true
+# 規定を人が確認済みのソース。スーパーホテルは「当日・無連絡のみ 100%」＝前日まで無料
+# （2026-09-18 に予約画面のキャンセル料表示で確認）
+free_cancel_sources = ["superhotel"]
 no_cancel_keywords = ["返金不可", "キャンセル不可", "取消不可", "事前決済", "事前カード決済", "変更不可", "ノンリファンダブル"]
 free_cancel_keywords = ["前日まで無料", "キャンセル無料", "無料キャンセル", "当日まで無料", "現地決済", "現地払い"]
 

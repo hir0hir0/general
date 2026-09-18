@@ -142,13 +142,16 @@ def check_guards(cfg: Config, offer: Offer) -> None:
 def check_cancel_policy(bcfg: dict[str, Any], offer: Offer) -> None:
     """無料キャンセルが確認できるプランだけを許可する。
 
-    プラン説明に「返金不可」「事前決済」などがあれば拒否。
-    無料キャンセルを示す語が 1 つも無い場合も、確認できないので拒否する。
+    - プラン説明に「返金不可」「事前決済」などがあれば常に拒否
+    - free_cancel_sources に入れたソースは、規定を人が確認済みとして本文一致を省く
+    - それ以外は無料キャンセルを示す語が無ければ拒否（判断できないものは実行しない）
     """
     text = " ".join([offer.plan_name, offer.room_name, offer.plan_text, offer.hotel_text])
     ng = [k for k in bcfg.get("no_cancel_keywords", []) if k in text]
     if ng:
         raise BookingBlocked(f"取消不可・事前決済の疑いがあるプラン（{ng[0]}）")
+    if offer.source in [str(x) for x in bcfg.get("free_cancel_sources", [])]:
+        return
     ok = [k for k in bcfg.get("free_cancel_keywords", []) if k in text]
     if not ok:
         raise BookingBlocked("無料キャンセルの記載を確認できないプラン")

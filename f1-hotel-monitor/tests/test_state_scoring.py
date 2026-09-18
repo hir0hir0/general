@@ -131,3 +131,8 @@ def test_booking_requires_confirmable_free_cancellation(cfg, monkeypatch):
         check_guards(cfg, offer(plan_text="早期割引・事前決済・返金不可"))
     # 無料キャンセルが読み取れる → 通る
     check_guards(cfg, offer(plan_text="現地決済。前日まで無料でキャンセルできます"))
+    # 規定確認済みのソース（スーパーホテル）は本文に記載が無くても通る
+    check_guards(cfg, offer(source="superhotel", plan_text="素泊まり"))
+    # ただし事前決済プランは確認済みソースでも拒否
+    with pytest.raises(BookingBlocked, match="取消不可|事前決済"):
+        check_guards(cfg, offer(source="superhotel", plan_text="事前カード決済・返金不可"))
