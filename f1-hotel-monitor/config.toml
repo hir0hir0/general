@@ -251,6 +251,11 @@ max_total_price = 120000 # 合計がこれを超えたら実行しない（円�
 timeout_sec = 15
 required_guest_fields = ["name", "kana", "phone", "email"]
 
+# 無料キャンセルを確認できるプランだけ予約する（確認できなければ実行しない）
+require_free_cancel = true
+no_cancel_keywords = ["返金不可", "キャンセル不可", "取消不可", "事前決済", "事前カード決済", "変更不可", "ノンリファンダブル"]
+free_cancel_keywords = ["前日まで無料", "キャンセル無料", "無料キャンセル", "当日まで無料", "現地決済", "現地払い"]
+
 # 予約する日程（未指定なら stay.ranges すべて）
 [[booking.stays]]
 checkin = "2027-04-09"

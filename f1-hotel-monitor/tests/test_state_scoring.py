@@ -1,6 +1,8 @@
 import dataclasses
 import json
 
+import pytest
+
 from f1hotel.models import Offer
 from f1hotel.scoring import score_offer, sort_key
 from f1hotel.state import append_history, compute_diff, load_state, merge_for_save, save_state
@@ -108,3 +110,24 @@ def test_sort_key_orders_instant_first(cfg):
     scored = [(o, score_offer(o, cfg.scoring, cfg.threshold_for(o))) for o in items]
     scored.sort(key=lambda t: sort_key(*t))
     assert [o.hotel_id for o, _ in scored] == ["c", "b", "a"]
+
+
+def test_booking_requires_confirmable_free_cancellation(cfg, monkeypatch):
+    from f1hotel.booking import BookingBlocked, check_guards
+
+    monkeypatch.setenv("F1HOTEL_BOOKING", "1")
+    for k, v in (("GUEST_NAME", "山田"), ("GUEST_KANA", "ヤマダ"), ("GUEST_PHONE", "09000000000"), ("GUEST_EMAIL", "a@b.c")):
+        monkeypatch.setenv(k, v)
+    cfg.raw["booking"]["enabled"] = True
+
+    def offer(**kw):
+        return mk("1", price=90000, party="親子2人1室", checkin="2027-04-09", checkout="2027-04-12", nights=3, **kw)
+
+    # 記載が無い → 実行しない
+    with pytest.raises(BookingBlocked, match="無料キャンセル"):
+        check_guards(cfg, offer(plan_text="素泊まり"))
+    # 取消不可 → 実行しない
+    with pytest.raises(BookingBlocked, match="取消不可|事前決済"):
+        check_guards(cfg, offer(plan_text="早期割引・事前決済・返金不可"))
+    # 無料キャンセルが読み取れる → 通る
+    check_guards(cfg, offer(plan_text="現地決済。前日まで無料でキャンセルできます"))
