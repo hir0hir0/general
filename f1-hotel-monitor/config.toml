@@ -151,17 +151,18 @@ soldout_keywords = ["満室", "空室なし", "ご予約いただけません", 
 
 # 東横INN は小学生以下 1 名添い寝無料。人数パターンの adults / rooms が URL に展開される
 # code は公式サイトのホテルページ URL（/search/detail/<code>/ など）から控える
-# code が "00000" の間は、起動時に公式サイトを開いて候補を
-# data/toyoko_candidates.txt に書き出す（そこから正しいコードを転記する）
+# code は公式サイトの /search/detail/<code>/ から取得済み。
+# 未設定（"00000"）のホテルを足した場合は、起動時に候補を
+# data/toyoko_candidates.txt に書き出す
 [[toyoko.hotels]]
-code = "00000"
+code = "00273"          # https://www.toyoko-inn.com/search/detail/00273/
 name = "東横INN津駅西口"
 search_name = "津駅西口"
 area_label = "津"
 tier = 1
 
 [[toyoko.hotels]]
-code = "00000"
+code = "00267"          # https://www.toyoko-inn.com/search/detail/00267/
 name = "東横INN近鉄四日市駅北口"
 search_name = "四日市"
 area_label = "四日市"

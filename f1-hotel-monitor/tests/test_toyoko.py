@@ -144,6 +144,8 @@ def test_extract_hotel_links():
 
 
 def test_discover_codes_writes_candidates(cfg):
+    # 本番設定はコード設定済みなので、未設定ホテルを 1 件足して確認する
+    cfg.toyoko_hotels = [ToyokoHotel("00000", "東横INN未設定", "津", 1, search_name="津駅西口")]
     calls = []
 
     def fake(urls, tcfg):
@@ -153,6 +155,6 @@ def test_discover_codes_writes_candidates(cfg):
     text = discover_codes(cfg, fetcher=fake)
     assert "00169" in text and "00246" in text
     assert "東横INN津駅西口" in text
-    # 未設定 2 ホテル × テンプレート 3 件
-    assert len(calls[0]) == 6
+    # 未設定 1 ホテル × テンプレート 3 件
+    assert len(calls[0]) == 3
     assert any("keyword=" in u for u in calls[0])
