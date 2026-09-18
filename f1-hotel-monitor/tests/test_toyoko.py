@@ -90,9 +90,11 @@ def test_fetch_toyoko_covers_every_party(cfg):
         return [FetchedPage(u, SAMPLE) for u in urls]
 
     res = fetch_toyoko(cfg, fetcher=fake)
-    assert len(calls[0]) == 3 * len(cfg.stays)  # 3 パターン × 日程数
-    assert {o.party for o in res.offers} == {"親子2人1室", "4人1室", "4人2室"}
+    # 4人1室（大人3名/1室）は客室定員を超えるので検索しない
+    assert len(calls[0]) == 2 * len(cfg.stays)
+    assert {o.party for o in res.offers} == {"親子2人1室", "4人2室"}
     assert any("room=2" in u for u in calls[0])
+    assert not any("adult=3&room=1" in u for u in calls[0])
 
 
 def test_fetch_toyoko_unparsed_dumps_html(cfg):

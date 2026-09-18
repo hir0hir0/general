@@ -52,7 +52,8 @@ instant_price_per_night = 25000
 
 [schedule]
 # 通常の実行時刻（JST）。`monitor.py schedule` と crontab の両方で使う
-daily_times = ["09:00", "21:00"]
+# キャンセル拾いのため 1 日 4 回。深夜〜早朝はキャンセル反映が多い
+daily_times = ["07:00", "12:00", "18:00", "22:30"]
 # 開放直後期は 1 時間毎（JST）。[開始日, 終了日] の両端を含む
 dense_windows = [
   ["2026-11-01", "2026-11-03"],   # スーパーホテル鈴鹿 開放
@@ -143,6 +144,8 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 locale = "ja-JP"
 # 取得間隔（サイト負荷配慮）
 request_interval_sec = 3.0
+# 1 室あたりの大人の上限。これを超える人数パターンは検索しない（東横INN は 2 名程度）
+max_adults_per_room = 2
 # プラン要素の候補セレクタ（上から順に試し、最初に要素が見つかったものを使う）
 plan_selectors = [".roomList .room", ".plan-list .plan", "li.room", "[class*=roomItem]", "[class*=plan]"]
 name_selectors = [".roomName", ".room-name", "h3", "h4", "[class*=name]"]

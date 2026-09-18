@@ -325,8 +325,17 @@ def fetch_toyoko(
     if not hotels:
         return result
 
+    # 東横INN の客室は 1 室 2 名程度が上限。3 名/室のパターンは検索しても無駄なので外す
+    max_adults = int(tcfg.get("max_adults_per_room", 2))
+    usable = [pt for pt in parties if pt.adults <= max_adults * pt.rooms]
+    skipped_parties = [pt.label for pt in parties if pt not in usable]
+    if skipped_parties:
+        log.info("toyoko: 1室あたり大人%d名を超えるためスキップ: %s", max_adults, ", ".join(skipped_parties))
+    if not usable:
+        return result
+
     jobs: list[tuple[ToyokoHotel, Stay, Party, str]] = [
-        (h, s, pt, build_url(cfg, h, s, pt)) for pt in parties for s in stays for h in hotels
+        (h, s, pt, build_url(cfg, h, s, pt)) for pt in usable for s in stays for h in hotels
     ]
     fetch = fetcher or (lambda urls, c: fetch_pages(urls, c, with_screenshot=dump_all))
     pages = fetch([u for _, _, _, u in jobs], tcfg)

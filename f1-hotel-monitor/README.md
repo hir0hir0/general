@@ -100,7 +100,7 @@ python monitor.py run --notify
 
 ### A. cron
 
-`deploy/crontab.example` を参照。9:00 / 21:00 に `run --notify`、毎時 5 分に `run --notify --only-if-dense`。
+`deploy/crontab.example` を参照。`config.toml` の `daily_times`（既定 7:00 / 12:00 / 18:00 / 22:30）に `run --notify`、毎時 5 分に `run --notify --only-if-dense`。
 `--only-if-dense` は `config.toml` の `dense_windows`（スーパーホテル開放 11/1、ルートイン特別販売の 1 月中旬）に該当する日だけ動く。
 
 ### B. Synology NAS・ブラウザだけで導入（SSH・PC 不要）
@@ -233,7 +233,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 docker compose -f deploy/docker-compose.yml logs -f
 ```
 
-`monitor.py schedule` が JST で `daily_times`（9:00/21:00）と `dense_windows` 内の毎正時に実行する。
+`monitor.py schedule` が JST で `daily_times`（既定 7:00/12:00/18:00/22:30）と `dense_windows` 内の毎正時に実行する。
 `config.toml` は実行のたびに再読込されるので、期間や閾値の変更にコンテナ再起動は不要。
 
 ## 4. 通知判定
