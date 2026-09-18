@@ -372,3 +372,21 @@ def test_area_cache(tmp_path):
     tree2 = load_area_tree(None, path)
     assert [m.code for m in tree2] == ["mie", "aichi"]
     assert c.request_count == 1
+
+
+def test_schedule_picks_hourly_toyoko_and_daily_all(cfg):
+    import datetime as _dt
+    from zoneinfo import ZoneInfo
+
+    import monitor
+
+    jst = ZoneInfo("Asia/Tokyo")
+    # 07:00 の全ソース実行の直後 → 次は 07:20 の東横INN のみ
+    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 7, 0, 1, tzinfo=jst))
+    assert (t.hour, t.minute) == (7, 20) and src == "toyoko"
+    # 07:20 の直後 → 次は 08:20（東横INN）、12:00 より前
+    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 7, 20, 1, tzinfo=jst))
+    assert (t.hour, t.minute) == (8, 20) and src == "toyoko"
+    # 11:59 → 12:00 の全ソース
+    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 11, 59, tzinfo=jst))
+    assert (t.hour, t.minute) == (12, 0) and src == "rakuten,toyoko"

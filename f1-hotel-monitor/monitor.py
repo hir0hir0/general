@@ -250,17 +250,30 @@ def cmd_test_notify(args: argparse.Namespace, cfg: Config) -> int:
 # ---------------------------------------------------------------------------
 # schedule（内蔵スケジューラ）
 # ---------------------------------------------------------------------------
-def next_run_time(cfg: Config, after: dt.datetime) -> dt.datetime:
-    """after より後の直近の実行時刻（JST）。密度アップ期間は毎正時も対象。"""
-    candidates: list[dt.datetime] = []
+def next_run_time(cfg: Config, after: dt.datetime) -> tuple[dt.datetime, str]:
+    """after より後の直近の実行時刻と、その回で見るソース。
+
+    - daily_times: 全ソース
+    - dense_windows 内の毎正時: 全ソース
+    - schedule.hourly_sources: 毎時 :20 にそのソースだけ（東横INN のキャンセル拾い用）
+    """
+    all_sources = ",".join(ALL_SOURCES)
+    hourly = str(cfg.raw.get("schedule", {}).get("hourly_sources", "")).strip()
+    candidates: list[tuple[dt.datetime, str]] = []
     for day_offset in range(0, 3):
         day = (after + dt.timedelta(days=day_offset)).date()
         for hhmm in cfg.daily_times:
             h, m = (int(x) for x in hhmm.split(":"))
-            candidates.append(dt.datetime.combine(day, dt.time(h, m), tzinfo=JST))
+            candidates.append((dt.datetime.combine(day, dt.time(h, m), tzinfo=JST), all_sources))
         if cfg.is_dense_day(day):
-            candidates.extend(dt.datetime.combine(day, dt.time(h, 0), tzinfo=JST) for h in range(24))
-    future = sorted(c for c in candidates if c > after)
+            candidates.extend(
+                (dt.datetime.combine(day, dt.time(h, 0), tzinfo=JST), all_sources) for h in range(24)
+            )
+        if hourly:
+            candidates.extend(
+                (dt.datetime.combine(day, dt.time(h, 20), tzinfo=JST), hourly) for h in range(24)
+            )
+    future = sorted(c for c in candidates if c[0] > after)
     return future[0]
 
 
@@ -272,12 +285,13 @@ def cmd_schedule(args: argparse.Namespace, cfg: Config) -> int:
     if args.run_now:
         cmd_run(run_args, cfg)
     while True:
-        nxt = next_run_time(cfg, now_jst())
+        nxt, sources = next_run_time(cfg, now_jst())
         wait = (nxt - now_jst()).total_seconds()
-        log.info("next run at %s (in %.0f min)", nxt.strftime("%m/%d %H:%M"), wait / 60)
+        log.info("next run at %s [%s] (in %.0f min)", nxt.strftime("%m/%d %H:%M"), sources, wait / 60)
         time.sleep(max(1.0, wait))
         try:
             cfg = load_config(cfg.config_path)  # 設定変更を毎回反映
+            run_args.sources = sources
             cmd_run(run_args, cfg)
         except Exception:  # noqa: BLE001
             log.exception("scheduled run failed")
