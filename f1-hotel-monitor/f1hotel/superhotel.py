@@ -93,8 +93,18 @@ def fetch_superhotel(
     pages = fetch([u for _, _, _, u in jobs], scfg)
     debug_dir = cfg.data_dir / "debug"
 
+    saved_sample = False
     for (hotel, stay, party, url), page in zip(jobs, pages):
         name = f"superhotel_{hotel.get('code')}_{party.label}_{stay.checkin.isoformat()}"
+        # 成否にかかわらず最初の 1 ページは必ず保存する（セレクタ調整用）
+        if not saved_sample and not isinstance(page, Exception):
+            try:
+                cfg.data_dir.mkdir(parents=True, exist_ok=True)
+                (cfg.data_dir / "superhotel_sample.html").write_text(page.html, encoding="utf-8")
+                (cfg.data_dir / "superhotel_sample_url.txt").write_text(url + "\n", encoding="utf-8")
+                saved_sample = True
+            except OSError as e:
+                log.warning("サンプル保存に失敗: %s", e)
         if isinstance(page, Exception):
             msg = f"superhotel [{party.label}] {hotel.get('name')} {stay.label}: {page}"
             log.error(msg)

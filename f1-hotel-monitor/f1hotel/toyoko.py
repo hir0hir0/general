@@ -351,8 +351,16 @@ def fetch_toyoko(
     pages = fetch([u for _, _, _, u in jobs], tcfg)
     debug_dir = cfg.data_dir / "debug"
 
+    saved_sample = False
     for (hotel, stay, party, url), page in zip(jobs, pages):
         name = f"toyoko_{hotel.code}_{party.label}_{stay.checkin.isoformat()}"
+        if not saved_sample and not isinstance(page, Exception):
+            try:
+                cfg.data_dir.mkdir(parents=True, exist_ok=True)
+                (cfg.data_dir / "toyoko_sample.html").write_text(page.html, encoding="utf-8")
+                saved_sample = True
+            except OSError as e:
+                log.warning("サンプル保存に失敗: %s", e)
         if isinstance(page, Exception):
             msg = f"toyoko [{party.label}] {hotel.name} {stay.label}: {page}"
             log.error(msg)
