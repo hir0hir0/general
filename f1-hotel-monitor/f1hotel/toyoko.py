@@ -167,6 +167,71 @@ def offers_from_rows(rows: list[PlanRow], hotel: ToyokoHotel, stay: Stay, url: s
 
 
 # ---------------------------------------------------------------------------
+# 施設コードの発見（公式サイトのリンクから拾う）
+# ---------------------------------------------------------------------------
+CODE_RE = re.compile(r"/(?:search/)?(?:detail|hotel)/(?:[a-z\-]+/)?(\d{3,6})")
+
+
+def extract_hotel_links(html: str, base: str = "https://www.toyoko-inn.com") -> list[tuple[str, str, str]]:
+    """(code, 表示名, URL) の一覧を返す。DOM 構造に依存せず a[href] から拾う。"""
+    soup = BeautifulSoup(html, "html.parser")
+    out: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        m = CODE_RE.search(href)
+        if not m:
+            continue
+        code = m.group(1)
+        name = " ".join(a.get_text(" ", strip=True).split())
+        if not name:
+            img = a.find("img")
+            name = img.get("alt", "") if img else ""
+        url = href if href.startswith("http") else base.rstrip("/") + "/" + href.lstrip("/")
+        key = code + name
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((code, name[:60], url))
+    return out
+
+
+def discover_codes(cfg: Config, fetcher: Callable[[list[str], dict[str, Any]], list["FetchedPage | Exception"]] | None = None) -> str:
+    """コード未設定のホテルについて候補を集め、結果テキストを返す（/data に保存する想定）。"""
+    tcfg = cfg.toyoko
+    templates = tcfg.get("discover", {}).get("url_templates", [])
+    targets = [h for h in cfg.toyoko_hotels if h.needs_code]
+    if not targets or not templates:
+        return ""
+    urls: list[str] = []
+    labels: list[str] = []
+    for h in targets:
+        q = h.search_name or h.name
+        for t in templates:
+            urls.append(t.format(q=q))
+            labels.append(f"{h.name} / {q}")
+    fetch = fetcher or (lambda us, c: fetch_pages(us, c, with_screenshot=True))
+    pages = fetch(urls, tcfg)
+    debug_dir = cfg.data_dir / "debug"
+    lines = ["# 東横INN 施設コード候補（config.toml の toyoko.hotels[].code に転記する）", ""]
+    for i, (label, page) in enumerate(zip(labels, pages)):
+        lines.append(f"## {label}")
+        lines.append(f"   URL: {urls[i]}")
+        if isinstance(page, Exception):
+            lines.append(f"   取得失敗: {page}")
+            lines.append("")
+            continue
+        _dump(debug_dir, f"toyoko_discover_{i}", page.html, page.screenshot)
+        links = extract_hotel_links(page.html)
+        if not links:
+            lines.append("   リンクから抽出できず（HTML は data/debug に保存）")
+        for code, name, url in links[:40]:
+            lines.append(f"   {code}\t{name}\t{url}")
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
 # ブラウザ取得
 # ---------------------------------------------------------------------------
 @dataclass

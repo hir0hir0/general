@@ -9,6 +9,8 @@ from f1hotel.config import ToyokoHotel
 from f1hotel.models import Party, Stay
 from f1hotel.toyoko import (
     FetchedPage,
+    discover_codes,
+    extract_hotel_links,
     ToyokoFetchError,
     build_url,
     fetch_pages,
@@ -118,3 +120,39 @@ def test_fetch_pages_real_browser(cfg):
     assert pages[0].screenshot and "シングル" in pages[0].html
     rows = parse_plans(pages[0].html, cfg.toyoko)
     assert page_status(pages[0].html, rows, cfg.toyoko) == "ok"
+
+
+DISCOVER_HTML = """
+<html><body>
+ <ul class="hotelList">
+  <li><a href="/search/detail/00169/">東横INN津駅西口</a></li>
+  <li><a href="https://www.toyoko-inn.com/search/detail/00246/?x=1">東横INN近鉄四日市駅北口</a></li>
+  <li><a href="/hotel/00169/plan">同じ施設の別リンク</a></li>
+  <li><a href="/about">会社情報</a></li>
+ </ul>
+</body></html>
+"""
+
+
+def test_extract_hotel_links():
+    links = extract_hotel_links(DISCOVER_HTML)
+    codes = [c for c, _, _ in links]
+    assert "00169" in codes and "00246" in codes
+    assert all(not u.startswith("/") for _, _, u in links)  # 絶対 URL になる
+    names = dict((c, n) for c, n, _ in links)
+    assert names["00246"] == "東横INN近鉄四日市駅北口"
+
+
+def test_discover_codes_writes_candidates(cfg):
+    calls = []
+
+    def fake(urls, tcfg):
+        calls.append(urls)
+        return [FetchedPage(u, DISCOVER_HTML) for u in urls]
+
+    text = discover_codes(cfg, fetcher=fake)
+    assert "00169" in text and "00246" in text
+    assert "東横INN津駅西口" in text
+    # 未設定 2 ホテル × テンプレート 3 件
+    assert len(calls[0]) == 6
+    assert any("keyword=" in u for u in calls[0])

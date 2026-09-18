@@ -36,6 +36,11 @@ class ToyokoHotel:
     name: str
     area_label: str
     tier: int
+    search_name: str = ""  # 公式サイトで施設コードを探すときの検索語
+
+    @property
+    def needs_code(self) -> bool:
+        return not self.code or self.code == "00000"
 
 
 @dataclass

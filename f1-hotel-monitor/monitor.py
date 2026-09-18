@@ -42,7 +42,7 @@ from f1hotel.rakuten import (
 )
 from f1hotel.report import offers_table, summary_line
 from f1hotel.state import append_history, compute_diff, load_state, merge_for_save, save_state
-from f1hotel.toyoko import fetch_toyoko
+from f1hotel.toyoko import discover_codes, fetch_toyoko
 
 JST = ZoneInfo("Asia/Tokyo")
 log = logging.getLogger("monitor")
@@ -96,6 +96,16 @@ def collect(cfg: Config, sources: list[str]) -> list[SourceResult]:
             results.append(SourceResult("rakuten", [], [f"rakuten: {e}"]))
     if "toyoko" in sources:
         try:
+            if any(h.needs_code for h in cfg.toyoko_hotels):
+                out = cfg.data_dir / "toyoko_candidates.txt"
+                if not out.exists():
+                    log.info("東横INN の施設コード未設定 → 候補を %s に書き出します", out)
+                    try:
+                        text = discover_codes(cfg)
+                        if text:
+                            out.write_text(text, encoding="utf-8")
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("施設コードの探索に失敗: %s", e)
             results.append(fetch_toyoko(cfg))
         except Exception as e:  # noqa: BLE001
             log.exception("toyoko failed")
@@ -195,6 +205,18 @@ def cmd_areas(args: argparse.Namespace, cfg: Config) -> int:
 # ---------------------------------------------------------------------------
 # toyoko-dump
 # ---------------------------------------------------------------------------
+def cmd_toyoko_discover(args: argparse.Namespace, cfg: Config) -> int:
+    text = discover_codes(cfg)
+    if not text:
+        print("コード未設定のホテルがない、または discover.url_templates が未設定です")
+        return 1
+    out = cfg.data_dir / "toyoko_candidates.txt"
+    out.write_text(text, encoding="utf-8")
+    print(text)
+    print(f"\n保存: {out}  （HTML/スクショ: {cfg.data_dir / 'debug'}）")
+    return 0
+
+
 def cmd_toyoko_dump(args: argparse.Namespace, cfg: Config) -> int:
     res = fetch_toyoko(cfg, dump_all=True)
     print(summary_line(res.offers))
@@ -284,6 +306,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser("toyoko-dump", help="東横INN ページを保存（セレクタ調整用）")
     d.set_defaults(func=cmd_toyoko_dump)
+
+    dc = sub.add_parser("toyoko-discover", help="東横INN の施設コード候補を探す")
+    dc.set_defaults(func=cmd_toyoko_discover)
 
     t = sub.add_parser("test-notify", help="通知テスト")
     t.add_argument("--error", action="store_true", help="エラーチャネルに送る")
