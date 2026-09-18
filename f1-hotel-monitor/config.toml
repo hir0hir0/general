@@ -226,10 +226,18 @@ request_interval_sec = 2.0
 max_adults_per_room = 3
 # SPA なので描画待ちが要る。この文字列が出るまで待つ
 wait_for_text = "プラン"
-plan_selectors = ["[class*=plan-card]", "[class*=planCard]", "[class*=room-card]", "[class*=plan]", "li[class*=card]"]
-name_selectors = ["[class*=plan-name]", "[class*=planName]", "[class*=room-name]", "h3", "h4"]
-price_selectors = ["[class*=price]", "[class*=amount]", "[class*=charge]"]
-soldout_keywords = ["満室", "空室なし", "受付前", "販売前", "予約できません", "空室がございません"]
+# 実 DOM（2026-09-18 に取得したページで確認）
+#   プランカード: li.c-listRoom-item（売り切れは c-listRoom-item-disabled が付く）
+#   プラン名:     h2.c-headingMain
+#   価格:         .c-textPrice-total / .c-textPrice
+plan_selectors = ["li.c-listRoom-item", ".c-listRoom-item", "[class*=listRoom-item]"]
+name_selectors = ["h2.c-headingMain", ".c-headingMain", "h2", "h3"]
+price_selectors = [".c-textPrice-total", ".c-textPrice", "[class*=textPrice]"]
+# 売り切れは class で判る。本文は長いので文字列頼みにしない
+soldout_class_keywords = ["disabled"]
+# 本文には「1,000pt」などがあるので、価格はセレクタからのみ読む
+price_from_selector_only = true
+soldout_keywords = ["空室なし", "満室", "予約できるプランがありません", "受付前", "販売前", "予約できません"]
 
 [[superhotel.hotels]]
 code = "sh-suzuka"

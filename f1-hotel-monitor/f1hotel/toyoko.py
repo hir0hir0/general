@@ -83,6 +83,11 @@ def parse_plans(html: str, toyoko_cfg: dict[str, Any]) -> list[PlanRow]:
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     soldout_kw = toyoko_cfg.get("soldout_keywords", ["満室"])
+    # 売り切れが class で表現されるサイト向け（例: c-listRoom-item-disabled）
+    soldout_classes = [str(c).lower() for c in toyoko_cfg.get("soldout_class_keywords", [])]
+    price_selectors = list(toyoko_cfg.get("price_selectors", []))
+    # true なら価格はセレクタからのみ読む（本文走査だとポイント数などを拾ってしまう）
+    price_only_from_selector = bool(toyoko_cfg.get("price_from_selector_only"))
     rows: list[PlanRow] = []
 
     elements = _select_first(soup, toyoko_cfg.get("plan_selectors", []))
@@ -90,12 +95,20 @@ def parse_plans(html: str, toyoko_cfg: dict[str, Any]) -> list[PlanRow]:
         text = " ".join(el.get_text(" ", strip=True).split())
         if not text:
             continue
+        class_attr = " ".join(el.get("class", []) or []).lower()
+        soldout_by_class = any(c in class_attr for c in soldout_classes)
         name_el = _select_first(el, toyoko_cfg.get("name_selectors", []))
         name = name_el[0].get_text(" ", strip=True) if name_el else text.split(" ")[0]
-        price_el = _select_first(el, toyoko_cfg.get("price_selectors", []))
-        price = _first_price(price_el[0].get_text(" ", strip=True)) if price_el else _first_price(text)
-        soldout = any(k in text for k in soldout_kw)
-        rows.append(PlanRow(name=name[:80], price=price, soldout=soldout and price is None, text=text[:300]))
+        price_el = _select_first(el, price_selectors)
+        if price_el:
+            price = _first_price(price_el[0].get_text(" ", strip=True))
+        elif price_only_from_selector and price_selectors:
+            price = None
+        else:
+            price = _first_price(text)
+        kw_hit = any(k in text for k in soldout_kw)
+        soldout = soldout_by_class or (kw_hit and price is None)
+        rows.append(PlanRow(name=name[:80], price=price, soldout=soldout, text=text[:600]))
 
     if rows:
         return rows
