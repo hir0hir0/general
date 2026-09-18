@@ -69,6 +69,13 @@ message = "明日 11/1 スーパーホテル鈴鹿 が 2027/4 分を開放予定
 date = "2027-01-10"
 message = "ルートイン鈴鹿レース日 特別販売は例年 1月中旬 14時ネット限定。公式の告知を確認し、開放日に手動予約できる体制を。"
 
+# 開放の瞬間だけ超短間隔で張り込む。秒単位で埋まるため
+[[schedule.watch_windows]]
+start = "2026-11-01T00:00"
+end = "2026-11-01T13:00"
+interval_seconds = 30
+sources = "superhotel"
+
 # ---------------------------------------------------------------------------
 # 楽天トラベル VacantHotelSearch API
 # ---------------------------------------------------------------------------
@@ -189,3 +196,82 @@ walk_minutes_max = 5
 breakfast_start_max = "06:30"
 bath_keywords = ["大浴場", "温泉", "露天"]
 family_room_keywords = ["ファミリー", "和洋室", "和室", "コネクティング", "フォース", "4名", "４名", "トリプル", "ツイン"]
+
+# ---------------------------------------------------------------------------
+# スーパーホテル（Playwright）。2027/4 分は 2026/11/1 開放見込み
+# ---------------------------------------------------------------------------
+[superhotel]
+# ※ 実 URL は monitor.py superhotel-dump で確認して差し替える
+url_template = "https://www.superhotel.co.jp/search/result/?hotel={code}&checkin={ci}&checkout={co}&adult={adults}&room={rooms}"
+date_format = "%Y-%m-%d"
+timeout_sec = 45
+headless = true
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+locale = "ja-JP"
+request_interval_sec = 2.0
+max_adults_per_room = 2
+plan_selectors = [".roomList .room", ".plan-list .plan", "li.room", "[class*=roomItem]", "[class*=plan]"]
+name_selectors = [".roomName", ".room-name", "h3", "h4", "[class*=name]"]
+price_selectors = [".price", "[class*=price]", "[class*=charge]"]
+soldout_keywords = ["満室", "空室なし", "×", "受付前", "販売前"]
+
+[[superhotel.hotels]]
+code = ""               # TODO: 公式サイトの URL から控える（superhotel-dump で候補を出す）
+name = "スーパーホテル鈴鹿"
+area_label = "鈴鹿"
+tier = 1
+access = "鈴鹿"
+
+# ---------------------------------------------------------------------------
+# 自動予約。開放と同時に取りに行く
+# ---------------------------------------------------------------------------
+[booking]
+enabled = false          # ← 準備が終わったら true に（加えて環境変数 F1HOTEL_BOOKING=1 が必要）
+dry_run = true           # ← true の間は確定ボタンを押さず手前で止まる
+sources = ["superhotel"] # 自動予約を許可するソース
+parties = ["4人2室", "親子2人1室"]   # このパターンのみ
+prefer_parties = ["4人2室", "親子2人1室"]
+max_total_price = 120000 # 合計がこれを超えたら実行しない（円）
+timeout_sec = 15
+required_guest_fields = ["name", "kana", "phone", "email"]
+
+# 予約する日程（未指定なら stay.ranges すべて）
+[[booking.stays]]
+checkin = "2027-04-09"
+checkout = "2027-04-12"
+
+# 予約フロー。実サイトを見てから selector を埋める（superhotel-dump のスクショ/HTML を使う）
+[[booking.flows.superhotel]]
+action = "goto"
+value = "{url}"
+[[booking.flows.superhotel]]
+action = "shot"
+value = "01_search"
+[[booking.flows.superhotel]]
+action = "click"
+selector = "TODO_予約ボタン"
+[[booking.flows.superhotel]]
+action = "fill"
+selector = "TODO_氏名"
+value = "{name}"
+[[booking.flows.superhotel]]
+action = "fill"
+selector = "TODO_カナ"
+value = "{kana}"
+[[booking.flows.superhotel]]
+action = "fill"
+selector = "TODO_電話"
+value = "{phone}"
+[[booking.flows.superhotel]]
+action = "fill"
+selector = "TODO_メール"
+value = "{email}"
+[[booking.flows.superhotel]]
+action = "shot"
+value = "02_form"
+[[booking.flows.superhotel]]
+action = "assert_text"
+value = "{checkin_slash}"
+[[booking.flows.superhotel]]
+action = "submit"
+selector = "TODO_予約を確定"

@@ -42,12 +42,13 @@ from f1hotel.rakuten import (
 )
 from f1hotel.report import offers_table, summary_line
 from f1hotel.state import append_history, compute_diff, load_state, merge_for_save, save_state
+from f1hotel.superhotel import fetch_superhotel
 from f1hotel.toyoko import discover_codes, fetch_toyoko
 
 JST = ZoneInfo("Asia/Tokyo")
 log = logging.getLogger("monitor")
 
-ALL_SOURCES = ["rakuten", "toyoko"]
+ALL_SOURCES = ["rakuten", "toyoko", "superhotel"]
 
 
 def now_jst() -> dt.datetime:
@@ -94,6 +95,12 @@ def collect(cfg: Config, sources: list[str]) -> list[SourceResult]:
         except (RakutenError, Exception) as e:  # noqa: BLE001
             log.exception("rakuten failed")
             results.append(SourceResult("rakuten", [], [f"rakuten: {e}"]))
+    if "superhotel" in sources:
+        try:
+            results.append(fetch_superhotel(cfg))
+        except Exception as e:  # noqa: BLE001
+            log.exception("superhotel failed")
+            results.append(SourceResult("superhotel", [], [f"superhotel: {e}"]))
     if "toyoko" in sources:
         try:
             if any(h.needs_code for h in cfg.toyoko_hotels):
@@ -205,6 +212,16 @@ def cmd_areas(args: argparse.Namespace, cfg: Config) -> int:
 # ---------------------------------------------------------------------------
 # toyoko-dump
 # ---------------------------------------------------------------------------
+def cmd_superhotel_dump(args: argparse.Namespace, cfg: Config) -> int:
+    res = fetch_superhotel(cfg, dump_all=True)
+    print(summary_line(res.offers))
+    print(offers_table(res.offers, cfg))
+    for e in res.errors:
+        print(f"- {e}")
+    print(f"\nHTML / スクショ: {cfg.data_dir / 'debug'}")
+    return 0 if not res.errors else 1
+
+
 def cmd_toyoko_discover(args: argparse.Namespace, cfg: Config) -> int:
     text = discover_codes(cfg)
     if not text:
@@ -258,8 +275,23 @@ def next_run_time(cfg: Config, after: dt.datetime) -> tuple[dt.datetime, str]:
     - schedule.hourly_sources: 毎時 :20 にそのソースだけ（東横INN のキャンセル拾い用）
     """
     all_sources = ",".join(ALL_SOURCES)
-    hourly = str(cfg.raw.get("schedule", {}).get("hourly_sources", "")).strip()
+    sched = cfg.raw.get("schedule", {})
+    hourly = str(sched.get("hourly_sources", "")).strip()
     candidates: list[tuple[dt.datetime, str]] = []
+
+    # 開放日の張り込み: 期間中は interval_seconds ごとにそのソースだけ見る
+    for w in sched.get("watch_windows", []):
+        try:
+            start = dt.datetime.fromisoformat(str(w["start"])).replace(tzinfo=JST)
+            end = dt.datetime.fromisoformat(str(w["end"])).replace(tzinfo=JST)
+        except (KeyError, ValueError):
+            continue
+        if after >= end:
+            continue
+        step = dt.timedelta(seconds=max(10, int(w.get("interval_seconds", 60))))
+        nxt = start if after < start else start + step * (int((after - start) / step) + 1)
+        if nxt < end:
+            candidates.append((nxt, str(w.get("sources", all_sources))))
     for day_offset in range(0, 3):
         day = (after + dt.timedelta(days=day_offset)).date()
         for hhmm in cfg.daily_times:
@@ -317,6 +349,9 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--middle", default="mie", help="middleClassCode（mie / aichi / gifu …。空で全件）")
     a.add_argument("--refresh", action="store_true", help="キャッシュを無視して再取得")
     a.set_defaults(func=cmd_areas)
+
+    sh = sub.add_parser("superhotel-dump", help="スーパーホテルのページを保存（URL/セレクタ調整用）")
+    sh.set_defaults(func=cmd_superhotel_dump)
 
     d = sub.add_parser("toyoko-dump", help="東横INN ページを保存（セレクタ調整用）")
     d.set_defaults(func=cmd_toyoko_dump)
