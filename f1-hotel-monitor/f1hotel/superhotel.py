@@ -28,6 +28,7 @@ def build_url(cfg: Config, hotel: dict[str, Any], stay: Stay, party: Party) -> s
         adults=party.adults,
         rooms=party.rooms,
         nights=stay.nights,
+        infants=party.infants_no_meal_no_bed,
     )
 
 

@@ -24,7 +24,8 @@
 |---|---|---|
 | 楽天トラベル | VacantHotelSearch API | 実装済み |
 | 東横INN 津駅西口／近鉄四日市駅北口 | Playwright | 実装済み（初回に URL/セレクタ確認が必要。下記） |
-| じゃらん／ルートイン／スーパーホテル | Playwright | 未実装（`f1hotel/` にソースを追加する構成） |
+| スーパーホテル鈴鹿 | Playwright（予約エンジン go-superhotel.reservation.jp） | 実装済み。2026/11/1 終日 1 分間隔で張り込み |
+| じゃらん／ルートイン | Playwright | 未実装（`f1hotel/` にソースを追加する構成） |
 | 鈴鹿サーキットホテル／JTB／湯の山 | Cowork 側のスケジュールタスクで告知監視 | 本ツール対象外 |
 
 ## 1. セットアップ
@@ -238,6 +239,23 @@ docker compose -f deploy/docker-compose.yml logs -f
 - `daily_times`（既定 7:00 / 12:00 / 18:00 / 22:30）: 全ソース
 - `hourly_sources`（既定 `toyoko`）: 毎時 :20 にそのソースだけ。満室の宿のキャンセル拾い用
 - `dense_windows` 内の毎正時: 全ソース
+- `[[schedule.watch_windows]]`: 開放日の張り込み。秒間隔・ソース・日程・人数を絞れる
+  （スーパーホテルは「毎月1日に 6 か月先まで開放、開始時刻は非公表」なので 11/1 は終日 1 分間隔）
+
+### 自動予約（準備中）
+
+`f1hotel/flow.py` が設定に書いた手順でフォームを操作し、`f1hotel/booking.py` がガードを効かせる。
+ガードは「config の `booking.enabled`」「環境変数 `F1HOTEL_BOOKING=1`」「日程・人数の完全一致」
+「合計金額の上限」「予約は 1 件まで」。既定は `dry_run = true` で確定ボタンを押さない。
+監視側からの呼び出しは未接続（下記「自動予約を有効にする」を参照）。
+
+#### 自動予約を有効にする
+
+1. `.env` に `GUEST_NAME` `GUEST_KANA` `GUEST_PHONE` `GUEST_EMAIL` を設定し、`F1HOTEL_BOOKING=1`
+2. `python monitor.py superhotel-dump` で予約フォームの HTML を取得し、
+   `config.toml` の `[[booking.flows.superhotel]]` の `TODO_...` を実セレクタに置き換える
+3. `booking.enabled = true`、まずは `dry_run = true` のまま近い日付でリハーサル
+4. 確定まで走らせる場合のみ `dry_run = false`
 `config.toml` は実行のたびに再読込されるので、期間や閾値の変更にコンテナ再起動は不要。
 
 ## 4. 通知判定

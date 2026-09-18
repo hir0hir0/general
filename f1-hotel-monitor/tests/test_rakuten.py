@@ -382,13 +382,13 @@ def test_schedule_picks_hourly_toyoko_and_daily_all(cfg):
 
     jst = ZoneInfo("Asia/Tokyo")
     # 07:00 の全ソース実行の直後 → 次は 07:20 の東横INN のみ
-    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 7, 0, 1, tzinfo=jst))
+    t, src, _ci, _pt = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 7, 0, 1, tzinfo=jst))
     assert (t.hour, t.minute) == (7, 20) and src == "toyoko"
     # 07:20 の直後 → 次は 08:20（東横INN）、12:00 より前
-    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 7, 20, 1, tzinfo=jst))
+    t, src, _ci, _pt = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 7, 20, 1, tzinfo=jst))
     assert (t.hour, t.minute) == (8, 20) and src == "toyoko"
     # 11:59 → 12:00 の全ソース
-    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 11, 59, tzinfo=jst))
+    t, src, _ci, _pt = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 11, 59, tzinfo=jst))
     assert (t.hour, t.minute) == (12, 0) and src == "rakuten,toyoko,superhotel"
 
 
@@ -400,13 +400,14 @@ def test_schedule_watch_window_polls_every_30s(cfg):
 
     jst = ZoneInfo("Asia/Tokyo")
     # 開放日の前 → 張り込み開始時刻（0:00）に飛ぶ。dense_windows と同時刻なので全ソース
-    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 31, 23, 59, tzinfo=jst))
+    t, src, _ci, _pt = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 31, 23, 59, tzinfo=jst))
     assert t == _dt.datetime(2026, 11, 1, 0, 0, tzinfo=jst) and "superhotel" in src
     # 張り込み中 → 30 秒刻み
-    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 11, 1, 9, 0, 5, tzinfo=jst))
-    assert (t.minute, t.second) == (0, 30) and src == "superhotel"  # 張り込みは superhotel のみ
-    t, _ = monitor.next_run_time(cfg, _dt.datetime(2026, 11, 1, 9, 0, 45, tzinfo=jst))
-    assert (t.minute, t.second) == (1, 0)
-    # 張り込み終了後は通常スケジュールに戻る
-    t, src = monitor.next_run_time(cfg, _dt.datetime(2026, 11, 1, 13, 30, tzinfo=jst))
-    assert src != "superhotel" or t.hour >= 14
+    t, src, ci, pt = monitor.next_run_time(cfg, _dt.datetime(2026, 11, 1, 9, 0, 5, tzinfo=jst))
+    assert (t.minute, t.second) == (1, 0) and src == "superhotel"  # 1 分間隔・superhotel のみ
+    assert ci == ["2027-04-09"] and pt == ["親子2人1室"]
+    t, _s, _ci, _pt = monitor.next_run_time(cfg, _dt.datetime(2026, 11, 1, 9, 1, 5, tzinfo=jst))
+    assert (t.minute, t.second) == (2, 0)
+    # 張り込み終了（11/2 0:00）後は通常スケジュールに戻る
+    t, src, _ci, _pt = monitor.next_run_time(cfg, _dt.datetime(2026, 11, 2, 0, 5, tzinfo=jst))
+    assert src != "superhotel"

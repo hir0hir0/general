@@ -12,12 +12,14 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime as dt
 import json
 import logging
 import sys
 import time
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from f1hotel.config import Config, load_config
@@ -125,6 +127,19 @@ def cmd_run(args: argparse.Namespace, cfg: Config) -> int:
     if args.only_if_dense and not cfg.is_dense_day(today):
         log.info("%s は密度アップ期間外のためスキップ", today)
         return 0
+
+    # 張り込み中は対象日程・人数を絞る（サイト負荷と 1 巡の所要時間を下げる）
+    def _as_list(v: Any) -> list[str]:
+        if isinstance(v, str):
+            return [x.strip() for x in v.split(",") if x.strip()]
+        return list(v or [])
+
+    checkins = _as_list(getattr(args, "checkins", None))
+    parties = _as_list(getattr(args, "parties", None))
+    if checkins:
+        cfg = dataclasses.replace(cfg, stays=[s for s in cfg.stays if s.checkin.isoformat() in checkins] or cfg.stays)
+    if parties:
+        cfg = dataclasses.replace(cfg, parties=[p for p in cfg.parties if p.label in parties] or cfg.parties)
 
     sources = [s.strip() for s in args.sources.split(",") if s.strip()]
     unknown = [s for s in sources if s not in ALL_SOURCES]
@@ -267,7 +282,7 @@ def cmd_test_notify(args: argparse.Namespace, cfg: Config) -> int:
 # ---------------------------------------------------------------------------
 # schedule（内蔵スケジューラ）
 # ---------------------------------------------------------------------------
-def next_run_time(cfg: Config, after: dt.datetime) -> tuple[dt.datetime, str]:
+def next_run_time(cfg: Config, after: dt.datetime) -> tuple[dt.datetime, str, list[str], list[str]]:
     """after より後の直近の実行時刻と、その回で見るソース。
 
     - daily_times: 全ソース
@@ -277,7 +292,8 @@ def next_run_time(cfg: Config, after: dt.datetime) -> tuple[dt.datetime, str]:
     all_sources = ",".join(ALL_SOURCES)
     sched = cfg.raw.get("schedule", {})
     hourly = str(sched.get("hourly_sources", "")).strip()
-    candidates: list[tuple[dt.datetime, str]] = []
+    # (時刻, ソース, 絞り込むチェックイン日, 絞り込む人数パターン)
+    candidates: list[tuple[dt.datetime, str, list[str], list[str]]] = []
 
     # 開放日の張り込み: 期間中は interval_seconds ごとにそのソースだけ見る
     for w in sched.get("watch_windows", []):
@@ -291,19 +307,24 @@ def next_run_time(cfg: Config, after: dt.datetime) -> tuple[dt.datetime, str]:
         step = dt.timedelta(seconds=max(10, int(w.get("interval_seconds", 60))))
         nxt = start if after < start else start + step * (int((after - start) / step) + 1)
         if nxt < end:
-            candidates.append((nxt, str(w.get("sources", all_sources))))
+            candidates.append((
+                nxt,
+                str(w.get("sources", all_sources)),
+                [str(x) for x in w.get("checkins", [])],
+                [str(x) for x in w.get("parties", [])],
+            ))
     for day_offset in range(0, 3):
         day = (after + dt.timedelta(days=day_offset)).date()
         for hhmm in cfg.daily_times:
             h, m = (int(x) for x in hhmm.split(":"))
-            candidates.append((dt.datetime.combine(day, dt.time(h, m), tzinfo=JST), all_sources))
+            candidates.append((dt.datetime.combine(day, dt.time(h, m), tzinfo=JST), all_sources, [], []))
         if cfg.is_dense_day(day):
             candidates.extend(
-                (dt.datetime.combine(day, dt.time(h, 0), tzinfo=JST), all_sources) for h in range(24)
+                (dt.datetime.combine(day, dt.time(h, 0), tzinfo=JST), all_sources, [], []) for h in range(24)
             )
         if hourly:
             candidates.extend(
-                (dt.datetime.combine(day, dt.time(h, 20), tzinfo=JST), hourly) for h in range(24)
+                (dt.datetime.combine(day, dt.time(h, 20), tzinfo=JST), hourly, [], []) for h in range(24)
             )
     future = sorted(c for c in candidates if c[0] > after)
     return future[0]
@@ -312,18 +333,22 @@ def next_run_time(cfg: Config, after: dt.datetime) -> tuple[dt.datetime, str]:
 def cmd_schedule(args: argparse.Namespace, cfg: Config) -> int:
     log.info("scheduler start: daily=%s dense=%s", cfg.daily_times, [(a.isoformat(), b.isoformat()) for a, b in cfg.dense_windows])
     run_args = argparse.Namespace(
-        sources=args.sources, notify=True, no_save=False, only_if_dense=False, dry_run_notify=False, json=None
+        sources=args.sources, notify=True, no_save=False, only_if_dense=False,
+        dry_run_notify=False, json=None, checkins=[], parties=[],
     )
     if args.run_now:
         cmd_run(run_args, cfg)
     while True:
-        nxt, sources = next_run_time(cfg, now_jst())
+        nxt, sources, checkins, parties = next_run_time(cfg, now_jst())
         wait = (nxt - now_jst()).total_seconds()
-        log.info("next run at %s [%s] (in %.0f min)", nxt.strftime("%m/%d %H:%M"), sources, wait / 60)
+        narrow = f" ci={checkins} party={parties}" if checkins or parties else ""
+        log.info("next run at %s [%s]%s (in %.1f min)", nxt.strftime("%m/%d %H:%M:%S"), sources, narrow, wait / 60)
         time.sleep(max(1.0, wait))
         try:
             cfg = load_config(cfg.config_path)  # 設定変更を毎回反映
             run_args.sources = sources
+            run_args.checkins = checkins
+            run_args.parties = parties
             cmd_run(run_args, cfg)
         except Exception:  # noqa: BLE001
             log.exception("scheduled run failed")
@@ -343,6 +368,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--only-if-dense", action="store_true", help="密度アップ期間のみ実行")
     r.add_argument("--dry-run-notify", action="store_true", help="通知を送らずログに出す")
     r.add_argument("--json", default=None, help="結果を JSON ファイルにも書く")
+    r.add_argument("--checkins", default="", help="この日付のチェックインだけ見る（カンマ区切り）")
+    r.add_argument("--parties", default="", help="この人数パターンだけ見る（カンマ区切り）")
     r.set_defaults(func=cmd_run)
 
     a = sub.add_parser("areas", help="楽天エリアコード一覧")

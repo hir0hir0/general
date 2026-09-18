@@ -279,6 +279,16 @@ def fetch_pages(
                     page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 20_000))
                 except Exception:
                     pass  # SPA で networkidle にならない場合がある
+                want = toyoko_cfg.get("wait_for_text")
+                if want:  # SPA は描画完了を文字列で待つ
+                    try:
+                        page.wait_for_function(
+                            "t => document.body && document.body.innerText.includes(t)",
+                            arg=str(want),
+                            timeout=min(timeout_ms, 30_000),
+                        )
+                    except Exception:
+                        log.warning("wait_for_text '%s' が出ませんでした: %s", want, url)
                 shot = page.screenshot(full_page=True) if with_screenshot else None
                 out.append(FetchedPage(url=url, html=page.content(), screenshot=shot))
             except Exception as e:  # noqa: BLE001 - 1 件失敗しても続ける

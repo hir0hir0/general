@@ -70,11 +70,25 @@ date = "2027-01-10"
 message = "ルートイン鈴鹿レース日 特別販売は例年 1月中旬 14時ネット限定。公式の告知を確認し、開放日に手動予約できる体制を。"
 
 # 開放の瞬間だけ超短間隔で張り込む。秒単位で埋まるため
+# スーパーホテルは「当月含む 6 か月先まで、毎月1日に開始。開始時刻は非公表」。
+# 2026/11/1 に 2027/4 分が開放される。時刻が読めないので終日 1 分間隔で張り込む。
+# 負荷を抑えるため、この間は本命日程・1 パターンだけを見る。
 [[schedule.watch_windows]]
 start = "2026-11-01T00:00"
-end = "2026-11-01T13:00"
-interval_seconds = 30
+end = "2026-11-02T00:00"
+interval_seconds = 60
 sources = "superhotel"
+checkins = ["2027-04-09"]
+parties = ["親子2人1室"]
+
+# 12/1・1/1 も同様に張る（4月分の追加放出や他ホテルの開放に備える）
+[[schedule.watch_windows]]
+start = "2026-12-01T00:00"
+end = "2026-12-01T23:59"
+interval_seconds = 300
+sources = "superhotel"
+checkins = ["2027-04-09"]
+parties = ["親子2人1室"]
 
 # ---------------------------------------------------------------------------
 # 楽天トラベル VacantHotelSearch API
@@ -201,22 +215,24 @@ family_room_keywords = ["ファミリー", "和洋室", "和室", "コネクテ�
 # スーパーホテル（Playwright）。2027/4 分は 2026/11/1 開放見込み
 # ---------------------------------------------------------------------------
 [superhotel]
-# ※ 実 URL は monitor.py superhotel-dump で確認して差し替える
-url_template = "https://www.superhotel.co.jp/search/result/?hotel={code}&checkin={ci}&checkout={co}&adult={adults}&room={rooms}"
-date_format = "%Y-%m-%d"
-timeout_sec = 45
+# 予約エンジンは reservation.jp。日付は YYYYMMDD、施設コードは sh-<name>
+url_template = "https://go-superhotel.reservation.jp/ja/hotels/{code}/plans?checkin_date={ci}&checkout_date={co}&adults={adults}&child1={infants}&child2=0&child3=0&child4=0&child5=0&children={infants}&rooms={rooms}&dayuseFlg=0&sort=1&dateUndecidedFlg=0"
+date_format = "%Y%m%d"
+timeout_sec = 60
 headless = true
 user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 locale = "ja-JP"
 request_interval_sec = 2.0
-max_adults_per_room = 2
-plan_selectors = [".roomList .room", ".plan-list .plan", "li.room", "[class*=roomItem]", "[class*=plan]"]
-name_selectors = [".roomName", ".room-name", "h3", "h4", "[class*=name]"]
-price_selectors = [".price", "[class*=price]", "[class*=charge]"]
-soldout_keywords = ["満室", "空室なし", "×", "受付前", "販売前"]
+max_adults_per_room = 3
+# SPA なので描画待ちが要る。この文字列が出るまで待つ
+wait_for_text = "プラン"
+plan_selectors = ["[class*=plan-card]", "[class*=planCard]", "[class*=room-card]", "[class*=plan]", "li[class*=card]"]
+name_selectors = ["[class*=plan-name]", "[class*=planName]", "[class*=room-name]", "h3", "h4"]
+price_selectors = ["[class*=price]", "[class*=amount]", "[class*=charge]"]
+soldout_keywords = ["満室", "空室なし", "受付前", "販売前", "予約できません", "空室がございません"]
 
 [[superhotel.hotels]]
-code = ""               # TODO: 公式サイトの URL から控える（superhotel-dump で候補を出す）
+code = "sh-suzuka"
 name = "スーパーホテル鈴鹿"
 area_label = "鈴鹿"
 tier = 1
