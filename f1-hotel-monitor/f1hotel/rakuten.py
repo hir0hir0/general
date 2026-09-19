@@ -387,6 +387,8 @@ def parse_vacant_response(data: dict[str, Any], stay: Stay, target: SearchTarget
                         "review": basic.get("reviewAverage"),
                         "fetched_at": fetched,
                         "hotel_url": basic.get("hotelInformationUrl", ""),
+                        # 車で行く場合の判断材料。API の値は「あり」「無料」など短い文字列
+                        "parking": str(basic.get("parkingInformation", "") or ""),
                     },
                 )
             )

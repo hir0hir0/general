@@ -149,6 +149,20 @@ middle = "aichi"
 small_keywords = ["名古屋"]
 detail_keywords = ["名古屋駅", "金山", "栄", "伏見"]
 
+# 以下は「車で行く」場合にだけ意味があるエリア。電車だと乗り換えが多くて実用的でない。
+# 伊勢湾岸道・東名阪を使うと名古屋市街の渋滞を通らずにサーキット方面へ抜けられる。
+[[rakuten.areas]]
+tier = 2
+label = "知多・常滑（車）"
+middle = "aichi"
+small_keywords = ["知多", "常滑", "半田", "空港"]
+
+[[rakuten.areas]]
+tier = 3
+label = "刈谷・安城・岡崎（車）"
+middle = "aichi"
+small_keywords = ["刈谷", "安城", "岡崎", "豊田"]
+
 [[rakuten.areas]]
 tier = 4
 label = "名張・伊賀"
@@ -220,6 +234,9 @@ walk_minutes_max = 5
 breakfast_start_max = "06:30"
 bath_keywords = ["大浴場", "温泉", "露天"]
 family_room_keywords = ["ファミリー", "和洋室", "和室", "コネクティング", "フォース", "4名", "４名", "トリプル", "ツイン"]
+# 車で行く場合の加点。楽天の parkingInformation は「あり」「無料」など短い文字列
+parking_free_keywords = ["無料駐車場", "駐車場無料", "駐車場込み", "駐車料金無料", "駐車場あり（無料）"]
+parking_none_keywords = ["なし", "無し", "ございません"]
 
 # ---------------------------------------------------------------------------
 # スーパーホテル（Playwright）。2027/4 分は 2026/11/1 開放見込み

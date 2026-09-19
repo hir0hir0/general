@@ -136,3 +136,15 @@ def test_booking_requires_confirmable_free_cancellation(cfg, monkeypatch):
     # ただし事前決済プランは確認済みソースでも拒否
     with pytest.raises(BookingBlocked, match="取消不可|事前決済"):
         check_guards(cfg, offer(source="superhotel", plan_text="事前カード決済・返金不可"))
+
+
+def test_parking_bonus_for_car_trip(cfg):
+    free = mk("1", extra={"parking": "あり", "fetched_at": "x"}, plan_name="無料駐車場付き 4名")
+    assert "駐車場無料" in score_offer(free, cfg.scoring, cfg.threshold_for(free)).bonuses
+    有 = mk("2", extra={"parking": "あり"})
+    assert "駐車場あり" in score_offer(有, cfg.scoring, cfg.threshold_for(有)).bonuses
+    無 = mk("3", extra={"parking": "なし"})
+    b = score_offer(無, cfg.scoring, cfg.threshold_for(無)).bonuses
+    assert "駐車場あり" not in b and "駐車場無料" not in b
+    未知 = mk("4")
+    assert not [x for x in score_offer(未知, cfg.scoring, cfg.threshold_for(未知)).bonuses if "駐車場" in x]

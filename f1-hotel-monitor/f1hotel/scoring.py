@@ -72,6 +72,14 @@ def score_offer(offer: Offer, scoring_cfg: dict[str, Any], instant_price_per_nig
     elif offer.extra.get("breakfast"):
         bonuses.append("朝食付")
 
+    # 車で行くなら駐車場が効く。無料かどうかまで読めたら区別する
+    parking = str(offer.extra.get("parking", ""))
+    park_text = parking + " " + offer.plan_name + " " + offer.plan_text[:200]
+    if any(k in park_text for k in scoring_cfg.get("parking_free_keywords", [])):
+        bonuses.append("駐車場無料")
+    elif parking and not any(k in parking for k in scoring_cfg.get("parking_none_keywords", [])):
+        bonuses.append("駐車場あり")
+
     # 4 人などでは定員の大きい部屋が重要
     room_text = offer.room_name + " " + offer.plan_name
     fam = [k for k in scoring_cfg.get("family_room_keywords", []) if k in room_text]
