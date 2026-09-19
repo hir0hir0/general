@@ -326,8 +326,40 @@ def next_run_time(cfg: Config, after: dt.datetime) -> tuple[dt.datetime, str, li
             candidates.extend(
                 (dt.datetime.combine(day, dt.time(h, 20), tzinfo=JST), hourly, [], []) for h in range(24)
             )
-    future = sorted(c for c in candidates if c[0] > after)
-    return future[0]
+    future = [c for c in candidates if c[0] > after]
+    if not future:
+        raise RuntimeError("next_run_time: 候補がありません")
+    when = min(c[0] for c in future)
+    return (when, *_merge_candidates([c for c in future if c[0] == when]))
+
+
+def _merge_candidates(
+    same_time: list[tuple[dt.datetime, str, list[str], list[str]]],
+) -> tuple[str, list[str], list[str]]:
+    """同じ時刻に複数の予定が重なったら 1 回にまとめる。
+
+    張り込み窓どうしが重なると片方が落ちてしまうため、ソースは和集合にする。
+    絞り込み（チェックイン日・人数）は空リストが「全部」の意味なので、
+    1 つでも空があれば絞り込まない。
+    """
+    sources: list[str] = []
+    for _t, src, _ci, _pt in same_time:
+        for s in (x.strip() for x in src.split(",")):
+            if s and s not in sources:
+                sources.append(s)
+    sources.sort(key=lambda s: ALL_SOURCES.index(s) if s in ALL_SOURCES else len(ALL_SOURCES))
+
+    def union(idx: int) -> list[str]:
+        merged: list[str] = []
+        for cand in same_time:
+            if not cand[idx]:
+                return []
+            for v in cand[idx]:
+                if v not in merged:
+                    merged.append(v)
+        return merged
+
+    return ",".join(sources), union(2), union(3)
 
 
 def cmd_schedule(args: argparse.Namespace, cfg: Config) -> int:

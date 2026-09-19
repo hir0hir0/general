@@ -411,3 +411,24 @@ def test_schedule_watch_window_polls_every_30s(cfg):
     # 張り込み終了（11/2 0:00）後は通常スケジュールに戻る
     t, src, _ci, _pt = monitor.next_run_time(cfg, _dt.datetime(2026, 11, 2, 0, 5, tzinfo=jst))
     assert src != "superhotel"
+
+
+def test_schedule_merges_overlapping_windows(cfg):
+    """同時刻に重なった予定は 1 回にまとめる（片方のソースを落とさない）。"""
+    import datetime as _dt
+    from zoneinfo import ZoneInfo
+
+    import monitor
+
+    jst = ZoneInfo("Asia/Tokyo")
+    # 11/1 0:00 は superhotel 窓・rakuten 窓・dense_windows の正時が重なる
+    t, src, ci, pt = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 31, 23, 59, tzinfo=jst))
+    assert t == _dt.datetime(2026, 11, 1, 0, 0, tzinfo=jst)
+    assert set(src.split(",")) >= {"rakuten", "superhotel"}
+    # dense_windows 側が「全部」なので絞り込みは掛けない
+    assert ci == [] and pt == []
+    # 窓どうしだけが重なる時刻（9:05 は superhotel 60秒 と rakuten 300秒）
+    t, src, ci, pt = monitor.next_run_time(cfg, _dt.datetime(2026, 11, 1, 9, 4, 30, tzinfo=jst))
+    assert (t.minute, t.second) == (5, 0)
+    assert set(src.split(",")) == {"rakuten", "superhotel"}
+    assert ci == ["2027-04-09"] and pt == ["親子2人1室", "4人2室"]
