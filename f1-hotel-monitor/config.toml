@@ -81,6 +81,16 @@ sources = "superhotel"
 checkins = ["2027-04-09"]
 parties = ["親子2人1室"]
 
+# 同じ日、楽天側も 5 分間隔で張る。スーパーホテルは楽天・じゃらんでも売るため、
+# 公式より OTA が先に開くこともある。1 リクエスト/秒の制限内に収まる間隔にする
+[[schedule.watch_windows]]
+start = "2026-11-01T00:00"
+end = "2026-11-02T00:00"
+interval_seconds = 300
+sources = "rakuten"
+checkins = ["2027-04-09"]
+parties = ["親子2人1室", "4人2室"]
+
 # 12/1・1/1 も同様に張る（4月分の追加放出や他ホテルの開放に備える）
 [[schedule.watch_windows]]
 start = "2026-12-01T00:00"
