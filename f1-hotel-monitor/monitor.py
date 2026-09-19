@@ -164,9 +164,12 @@ def cmd_run(args: argparse.Namespace, cfg: Config) -> int:
         print("\n# errors")
         for e in errors:
             print(f"- {e}")
-    if getattr(args, "links", False):
+    # NAS では run を手で叩けないので、既定でログにリンクを載せる（[report] links で切れる）
+    rep = cfg.raw.get("report", {})
+    if getattr(args, "links", False) or rep.get("links", True):
+        limit = int(rep.get("links_limit", 20))
         print("\n# リンク（URL は楽天 API が返した値そのまま）")
-        print(links_list(offers, cfg))
+        print(links_list(offers, cfg, limit=limit))
     if args.json:
         Path(args.json).write_text(json.dumps([o.to_dict() for o in offers], ensure_ascii=False, indent=1), encoding="utf-8")
 
