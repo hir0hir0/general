@@ -189,3 +189,22 @@ def test_notify_filter_keeps_only_wanted(cfg):
     # フィルタ未設定なら素通し
     cfg.raw["notify"] = {}
     assert len(filter_diff(d, cfg).new) == 5
+
+
+def test_notify_filter_price_cap_per_tier(cfg):
+    from f1hotel.notify import filter_diff
+    from f1hotel.state import Diff
+
+    cfg.raw["notify"] = {"filter": {"max_total_price": 110000,
+                                    "max_total_price_by_tier": {"1": 150000}}}
+
+    def o(tier, price, key):
+        return dataclasses.replace(mk(key, price=price), tier=tier)
+
+    kept = [x.hotel_id for x in filter_diff(Diff(new=[
+        o(1, 140000, "1"),   # 圏1 は 15万まで通す
+        o(1, 150001, "2"),   # 圏1 でも超えれば落ちる
+        o(3, 140000, "3"),   # 圏3 は既定の 11万で落ちる
+        o(3, 100000, "4"),
+    ]), cfg).new]
+    assert kept == ["1", "4"]

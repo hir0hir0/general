@@ -76,7 +76,9 @@ def _wanted(o: Offer, f: dict[str, Any]) -> bool:
     max_tier = f.get("max_tier")
     if max_tier is not None and o.tier > int(max_tier):
         return False
-    cap = f.get("max_total_price")
+    # 圏ごとの上限があればそちらを優先する（近い圏ほど高くても通す）
+    by_tier = f.get("max_total_price_by_tier", {})
+    cap = by_tier.get(str(o.tier), f.get("max_total_price"))
     if cap is not None:
         if o.total_price is None:
             return bool(f.get("include_unknown_price", False))
