@@ -4,6 +4,7 @@ import json
 from f1hotel.models import Offer
 from f1hotel.notify import (
     MAX_NEW_LISTED,
+    NTFY_MAX_BODY_BYTES,
     Notifier,
     clip_bytes,
     build_diff_message,
@@ -35,6 +36,7 @@ def mk(i, price, tier=1, source="rakuten"):
 
 
 def test_build_diff_message(cfg):
+    cfg.raw["notify"] = {}  # 整形そのものを見るテストなので通知フィルタは外す
     d = Diff(new=[mk(1, 80000), mk(2, 30000)], price_changed=[(mk(3, 50000), mk(3, 45000))], gone=[mk(4, 1)])
     title, body, click = build_diff_message(d, cfg)
     assert "新規2件" in title and "(即1)" in title
@@ -72,6 +74,7 @@ def test_clip_bytes_counts_utf8():
 
 
 def test_large_diff_body_fits_ntfy_limit(cfg, monkeypatch):
+    cfg.raw["notify"] = {}  # バイト数の切り詰めを見るテストなので通知フィルタは外す
     many = [mk(i, 30000 + i, tier=(i % 4) + 1) for i in range(200)]
     for i, o in enumerate(many):
         o.party = ["親子2人1室", "4人1室", "4人2室"][i % 3]
@@ -80,7 +83,7 @@ def test_large_diff_body_fits_ntfy_limit(cfg, monkeypatch):
     title, body, _ = build_diff_message(d, cfg)
     assert "新規空き 200件" in body and "親子2人1室" in body.split("\n")[1]
     assert body.count("【") == MAX_NEW_LISTED
-    assert "…他 188 件" in body and "消滅 150件" in body
+    assert f"…他 {200 - MAX_NEW_LISTED} 件" in body and "消滅 150件" in body
 
     monkeypatch.setenv("NTFY_TOPIC", "t")
     s = Sess()
@@ -88,7 +91,7 @@ def test_large_diff_body_fits_ntfy_limit(cfg, monkeypatch):
     sent = s.posts[0][1]["data"]
     assert len(sent) < 4096  # 実際に送るバイト列が ntfy の上限を超えない
     payload = json.loads(sent)
-    assert len(payload["message"].encode("utf-8")) <= 2600
+    assert len(payload["message"].encode("utf-8")) <= NTFY_MAX_BODY_BYTES + 100
 
 
 def test_ntfy_payload(monkeypatch):

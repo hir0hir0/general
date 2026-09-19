@@ -160,3 +160,28 @@ def test_links_list_uses_api_urls_verbatim(cfg):
     assert "宿番号 1" in out
     # 同じ宿は 1 回だけ
     assert links_list([o, mk("1", checkin="2027-04-08")], cfg).count("宿番号 1") == 1
+
+
+def test_notify_filter_keeps_only_wanted(cfg):
+    from f1hotel.notify import filter_diff
+    from f1hotel.state import Diff
+
+    def o(party="4人1室", nights=3, price=90000, key="1"):
+        return mk(key, price=price, party=party, nights=nights, checkin="2027-04-09", checkout="2027-04-12")
+
+    cfg.raw["notify"] = {"filter": {"parties": ["4人1室", "4人2室"], "nights": [3], "max_total_price": 110000}}
+    d = Diff(
+        new=[o(), o(party="親子2人1室", key="2"), o(nights=2, key="3"), o(price=110001, key="4"), o(price=None, key="5")],
+        price_changed=[(o(price=130000), o(price=100000)), (o(price=130000, key="6"), o(price=120000, key="6"))],
+        gone=[o(key="7"), o(party="親子2人1室", key="8")],
+    )
+    f = filter_diff(d, cfg)
+    assert [x.hotel_id for x in f.new] == ["1"]
+    assert len(f.price_changed) == 1 and f.price_changed[0][1].total_price == 100000
+    assert [x.hotel_id for x in f.gone] == ["7"]
+    # 料金不明を通したいときだけ通る
+    cfg.raw["notify"]["filter"]["include_unknown_price"] = True
+    assert "5" in [x.hotel_id for x in filter_diff(d, cfg).new]
+    # フィルタ未設定なら素通し
+    cfg.raw["notify"] = {}
+    assert len(filter_diff(d, cfg).new) == 5

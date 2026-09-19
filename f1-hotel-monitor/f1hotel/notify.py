@@ -25,9 +25,9 @@ log = logging.getLogger(__name__)
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 LINE_MAX_TEXT = 4800
-NTFY_MAX_BODY_BYTES = 2500  # ntfy は 4096 バイト超で 413。JSON 全体で収まる値にする
+NTFY_MAX_BODY_BYTES = 3300  # ntfy は 4096 バイト超で 413。title と JSON の分を残す
 NTFY_MAX_TITLE_BYTES = 200
-MAX_NEW_LISTED = 12  # 本文に明細を出す件数（残りは「…他 N 件」）
+MAX_NEW_LISTED = 20  # 本文に明細を出す件数（残りは「…他 N 件」）
 MAX_PRICE_LISTED = 8
 MAX_GONE_LISTED = 3
 
@@ -65,8 +65,38 @@ def format_offer(o: Offer, s: Score) -> str:
     return "\n".join(lines)
 
 
+def _wanted(o: Offer, f: dict[str, Any]) -> bool:
+    """通知に出す条件。state には全件残すので、ここで絞っても新規判定はずれない。"""
+    parties = [str(x) for x in f.get("parties", [])]
+    if parties and o.party not in parties:
+        return False
+    nights = [int(x) for x in f.get("nights", [])]
+    if nights and o.nights not in nights:
+        return False
+    cap = f.get("max_total_price")
+    if cap is not None:
+        if o.total_price is None:
+            return bool(f.get("include_unknown_price", False))
+        if o.total_price > int(cap):
+            return False
+    return True
+
+
+def filter_diff(diff: Diff, cfg: Config) -> Diff:
+    f = cfg.raw.get("notify", {}).get("filter", {})
+    if not f:
+        return diff
+    return Diff(
+        new=[o for o in diff.new if _wanted(o, f)],
+        price_changed=[(a, b) for a, b in diff.price_changed if _wanted(b, f)],
+        gone=[o for o in diff.gone if _wanted(o, f)],
+        unchanged=diff.unchanged,
+    )
+
+
 def build_diff_message(diff: Diff, cfg: Config) -> tuple[str, str, str | None]:
     """(title, body, click_url) を返す。通知対象がなければ body は空。"""
+    diff = filter_diff(diff, cfg)
     scored_new = [(o, score_offer(o, cfg.scoring, cfg.threshold_for(o))) for o in diff.new]
     scored_new.sort(key=lambda t: (t[0].party, *sort_key(*t)))
     instant = sum(1 for _, s in scored_new if s.priority == "即")
