@@ -44,13 +44,15 @@ from f1hotel.rakuten import (
 )
 from f1hotel.report import offers_table, summary_line
 from f1hotel.state import append_history, compute_diff, load_state, merge_for_save, save_state
-from f1hotel.superhotel import fetch_superhotel
 from f1hotel.toyoko import discover_codes, fetch_toyoko
+from f1hotel.websource import fetch_web_source
 
 JST = ZoneInfo("Asia/Tokyo")
 log = logging.getLogger("monitor")
 
-ALL_SOURCES = ["rakuten", "toyoko", "superhotel"]
+ALL_SOURCES = ["rakuten", "toyoko", "superhotel", "jalan"]
+# config の [<名前>] セクションだけで足せる、ブラウザ経由のソース
+WEB_SOURCES = ["superhotel", "jalan"]
 
 
 def now_jst() -> dt.datetime:
@@ -97,12 +99,14 @@ def collect(cfg: Config, sources: list[str]) -> list[SourceResult]:
         except (RakutenError, Exception) as e:  # noqa: BLE001
             log.exception("rakuten failed")
             results.append(SourceResult("rakuten", [], [f"rakuten: {e}"]))
-    if "superhotel" in sources:
+    for name in WEB_SOURCES:
+        if name not in sources:
+            continue
         try:
-            results.append(fetch_superhotel(cfg))
+            results.append(fetch_web_source(cfg, name))
         except Exception as e:  # noqa: BLE001
-            log.exception("superhotel failed")
-            results.append(SourceResult("superhotel", [], [f"superhotel: {e}"]))
+            log.exception("%s failed", name)
+            results.append(SourceResult(name, [], [f"{name}: {e}"]))
     if "toyoko" in sources:
         try:
             if any(h.needs_code for h in cfg.toyoko_hotels):
@@ -227,8 +231,23 @@ def cmd_areas(args: argparse.Namespace, cfg: Config) -> int:
 # ---------------------------------------------------------------------------
 # toyoko-dump
 # ---------------------------------------------------------------------------
-def cmd_superhotel_dump(args: argparse.Namespace, cfg: Config) -> int:
-    res = fetch_superhotel(cfg, dump_all=True)
+def cmd_web_dump(args: argparse.Namespace, cfg: Config) -> int:
+    source = args.web_source
+    if getattr(args, "url", None):
+        # 設定前のサイトでも HTML を取れるようにする（セレクタを決めるため）
+        from f1hotel.toyoko import fetch_pages
+
+        page = fetch_pages([args.url], cfg.raw.get(source, {}), with_screenshot=True)[0]
+        if isinstance(page, Exception):
+            print(f"取得に失敗: {page}", file=sys.stderr)
+            return 1
+        cfg.data_dir.mkdir(parents=True, exist_ok=True)
+        out = cfg.data_dir / f"{source}_sample.html"
+        out.write_text(page.html, encoding="utf-8")
+        (cfg.data_dir / f"{source}_sample_url.txt").write_text(args.url + "\n", encoding="utf-8")
+        print(f"保存: {out} ({len(page.html)} bytes)")
+        return 0
+    res = fetch_web_source(cfg, source, dump_all=True)
     print(summary_line(res.offers))
     print(offers_table(res.offers, cfg))
     for e in res.errors:
@@ -410,7 +429,12 @@ def build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_areas)
 
     sh = sub.add_parser("superhotel-dump", help="スーパーホテルのページを保存（URL/セレクタ調整用）")
-    sh.set_defaults(func=cmd_superhotel_dump)
+    sh.add_argument("--url", help="設定を使わずこの URL を保存する")
+    sh.set_defaults(func=cmd_web_dump, web_source="superhotel")
+
+    jd = sub.add_parser("jalan-dump", help="じゃらんのページを保存（URL/セレクタ調整用）")
+    jd.add_argument("--url", help="設定を使わずこの URL を保存する")
+    jd.set_defaults(func=cmd_web_dump, web_source="jalan")
 
     d = sub.add_parser("toyoko-dump", help="東横INN ページを保存（セレクタ調整用）")
     d.set_defaults(func=cmd_toyoko_dump)

@@ -25,7 +25,8 @@
 | 楽天トラベル | VacantHotelSearch API | 実装済み |
 | 東横INN 津駅西口／近鉄四日市駅北口 | Playwright | 実装済み（初回に URL/セレクタ確認が必要。下記） |
 | スーパーホテル鈴鹿 | Playwright（予約エンジン go-superhotel.reservation.jp） | 実装済み。2026/11/1 終日 1 分間隔で張り込み |
-| じゃらん／ルートイン | Playwright | 未実装（`f1hotel/` にソースを追加する構成） |
+| じゃらん | Playwright（`f1hotel/websource.py` の設定駆動ソース） | 枠だけ実装済み。`config.toml` の `[jalan]` に URL とセレクタを入れれば動く（下記「OTA を足す」） |
+| ルートイン等その他 OTA | 同上 | 未設定（`[<名前>]` セクションを足すだけ） |
 | 鈴鹿サーキットホテル／JTB／湯の山 | Cowork 側のスケジュールタスクで告知監視 | 本ツール対象外 |
 
 ## 1. セットアップ
@@ -258,6 +259,37 @@ docker compose -f deploy/docker-compose.yml logs -f
 4. 確定まで走らせる場合のみ `dry_run = false`
 `config.toml` は実行のたびに再読込されるので、期間や閾値の変更にコンテナ再起動は不要。
 
+### OTA（じゃらん等）を足す
+
+スーパーホテルは公式サイトだけでなく楽天トラベル・じゃらんなどでも売る。
+在庫は別枠なので、公式が満でも OTA 側に残ることがある。楽天は API で既に見て
+いるので、残りは「ブラウザで開いて読む」だけの共通ソース
+（`f1hotel/websource.py`）で足せる。コードは触らず `config.toml` だけで済む。
+
+1. じゃらんで対象ホテルのプラン一覧を開き、URL の `yad` 番号を控える
+2. HTML を取る（セレクタを決めるため）
+
+   ```bash
+   python monitor.py jalan-dump --url "<プラン一覧の URL>"   # → data/jalan_sample.html
+   ```
+
+3. その HTML を見て `config.toml` の `[jalan]` を埋める
+
+   | 設定 | 意味 |
+   |---|---|
+   | `url_template` | `{code}` `{ci_y}` `{ci_m}` `{ci_d}` `{nights}` `{rooms}` `{adults}` `{infants}` が使える。先頭の `TODO ` を消すと有効になる |
+   | `plan_selectors` | プラン 1 件分のカードの CSS セレクタ（候補を複数書ける） |
+   | `name_selectors` / `price_selectors` | カード内のプラン名・価格 |
+   | `soldout_class_keywords` | 売り切れカードに付く class の一部（例 `disabled`） |
+   | `price_basis` | `total`（滞在合計表示）か `per_night`（1泊単価）か `auto` |
+
+4. `[[jalan.hotels]]` に `code`（yad 番号）・`name`・`area_label`・`tier` を足す
+
+`url_template` が `TODO` のまま、または `plan_selectors` が空のあいだは、この
+ソースは何もせずスキップされるので `run` の邪魔にはならない。
+別の OTA を足すときも、`[<名前>]` セクションを作って `monitor.py` の
+`WEB_SOURCES` に名前を 1 つ加えるだけでよい。
+
 ## 4. 通知判定
 
 - **新規空き**: 前回なし → 今回あり。**料金変動**・**消滅**も本文に含める
@@ -272,7 +304,7 @@ docker compose -f deploy/docker-compose.yml logs -f
 ## 5. ファイル構成
 
 ```
-monitor.py            CLI（run / areas / toyoko-dump / test-notify / schedule）
+monitor.py            CLI（run / areas / toyoko-dump / superhotel-dump / jalan-dump / test-notify / schedule）
 config.toml           日程・エリア・閾値・東横INN 設定（秘密情報は置かない）
 .env                  API キー・通知トークン（git 管理外）
 f1hotel/
@@ -280,6 +312,9 @@ f1hotel/
   models.py           Offer / Stay
   rakuten.py          楽天 API（エリア解決・空室検索・レート制限・リトライ）
   toyoko.py           東横INN Playwright（取得・解析・失敗時ダンプ）
+  websource.py        設定駆動のブラウザソース共通処理（スーパーホテル・じゃらん）
+  superhotel.py       [superhotel] を websource に渡すだけの薄い層
+  flow.py / booking.py  自動予約（未接続。ガード付き）
   state.py            前回結果 JSON と差分
   scoring.py          即／参考判定と子連れ加点
   notify.py           ntfy / LINE / Gmail、エラー通知の 1 日 1 回制限、リマインド

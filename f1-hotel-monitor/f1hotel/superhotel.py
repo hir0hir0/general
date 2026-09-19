@@ -2,69 +2,21 @@
 
 - 2027/4 分は 2026/11/1 に開放される見込み。開放直後は秒単位で埋まるので
   config の watch_windows で短間隔ポーリングし、空きを見つけたら booking へ渡す。
-- 解析は東横INN と同じ仕組み（設定のセレクタ候補 → テキスト走査のフォールバック）。
+- 中身は websource（設定駆動の共通ソース）。ここは [superhotel] を渡すだけ。
 """
 from __future__ import annotations
 
-import datetime as dt
-import logging
-import re
 from typing import Any, Callable
 
 from .config import Config
-from .models import Offer, Party, SourceResult, Stay
-from .toyoko import FetchedPage, PlanRow, _dump, fetch_pages, page_status, parse_plans
-
-log = logging.getLogger(__name__)
+from .models import Party, SourceResult, Stay
+from .toyoko import FetchedPage
+from .websource import fetch_web_source, offers_from_rows  # noqa: F401  (後方互換の再輸出)
+from .websource import build_url as _build_url
 
 
 def build_url(cfg: Config, hotel: dict[str, Any], stay: Stay, party: Party) -> str:
-    scfg = cfg.raw.get("superhotel", {})
-    fmt = scfg.get("date_format", "%Y-%m-%d")
-    return str(scfg["url_template"]).format(
-        code=hotel.get("code", ""),
-        ci=stay.checkin.strftime(fmt),
-        co=stay.checkout.strftime(fmt),
-        adults=party.adults,
-        rooms=party.rooms,
-        nights=stay.nights,
-        infants=party.infants_no_meal_no_bed,
-    )
-
-
-def offers_from_rows(
-    rows: list[PlanRow], hotel: dict[str, Any], stay: Stay, url: str, party: Party
-) -> list[Offer]:
-    out: list[Offer] = []
-    fetched = dt.datetime.now().isoformat(timespec="seconds")
-    for i, r in enumerate(rows):
-        if r.soldout or r.price is None:
-            continue
-        # 表示は 1 泊 1 室あたりが基本
-        total = (r.price * stay.nights if r.price < 60_000 else r.price) * party.rooms
-        out.append(
-            Offer(
-                source="superhotel",
-                hotel_id=str(hotel.get("code", "")),
-                hotel_name=str(hotel.get("name", "スーパーホテル")),
-                area_label=str(hotel.get("area_label", "")),
-                tier=int(hotel.get("tier", 1)),
-                party=party.label,
-                checkin=stay.checkin.isoformat(),
-                checkout=stay.checkout.isoformat(),
-                nights=stay.nights,
-                plan_id=re.sub(r"\s+", "_", r.name)[:40] or f"row{i}",
-                plan_name=r.name,
-                room_name=r.name,
-                total_price=total,
-                url=url,
-                access=str(hotel.get("access", "")),
-                plan_text=r.text,
-                hotel_text=str(hotel.get("name", "")),
-                extra={"fetched_at": fetched, "price_display": r.price, "price_basis": "daily_sum"},
-            )
-        )
-    return out
+    return _build_url(cfg, "superhotel", hotel, stay, party)
 
 
 def fetch_superhotel(
@@ -74,58 +26,4 @@ def fetch_superhotel(
     fetcher: Callable[[list[str], dict[str, Any]], list[FetchedPage | Exception]] | None = None,
     dump_all: bool = False,
 ) -> SourceResult:
-    scfg = cfg.raw.get("superhotel", {})
-    result = SourceResult(source="superhotel", offers=[])
-    hotels = [h for h in scfg.get("hotels", []) if h.get("code")]
-    if not hotels or not scfg.get("url_template"):
-        log.info("superhotel: 設定が未完成のためスキップ")
-        return result
-
-    stays = stays or cfg.stays
-    parties = parties or cfg.parties
-    max_adults = int(scfg.get("max_adults_per_room", 2))
-    usable = [p for p in parties if p.adults <= max_adults * p.rooms]
-    if not usable:
-        return result
-
-    jobs = [(h, s, p, build_url(cfg, h, s, p)) for p in usable for s in stays for h in hotels]
-    fetch = fetcher or (lambda us, c: fetch_pages(us, c, with_screenshot=dump_all))
-    pages = fetch([u for _, _, _, u in jobs], scfg)
-    debug_dir = cfg.data_dir / "debug"
-
-    saved_sample = False
-    for (hotel, stay, party, url), page in zip(jobs, pages):
-        name = f"superhotel_{hotel.get('code')}_{party.label}_{stay.checkin.isoformat()}"
-        # 成否にかかわらず最初の 1 ページは必ず保存する（セレクタ調整用）
-        if not saved_sample and not isinstance(page, Exception):
-            try:
-                cfg.data_dir.mkdir(parents=True, exist_ok=True)
-                (cfg.data_dir / "superhotel_sample.html").write_text(page.html, encoding="utf-8")
-                (cfg.data_dir / "superhotel_sample_url.txt").write_text(url + "\n", encoding="utf-8")
-                saved_sample = True
-            except OSError as e:
-                log.warning("サンプル保存に失敗: %s", e)
-        if isinstance(page, Exception):
-            msg = f"superhotel [{party.label}] {hotel.get('name')} {stay.label}: {page}"
-            log.error(msg)
-            result.errors.append(msg)
-            _dump(debug_dir, name, None, getattr(page, "screenshot", None))
-            continue
-        rows = parse_plans(page.html, scfg)
-        status = page_status(page.html, rows, scfg)
-        if dump_all:
-            _dump(debug_dir, name, page.html, page.screenshot)
-        if status == "unparsed":
-            msg = f"superhotel [{party.label}] {hotel.get('name')} {stay.label}: 解析できません url={url}"
-            log.error(msg)
-            result.errors.append(msg)
-            if not dump_all:
-                _dump(debug_dir, name, page.html, page.screenshot)
-            continue
-        offers = offers_from_rows(rows, hotel, stay, url, party)
-        log.info(
-            "superhotel [%s] %s %s: %s (%d rows, %d offers)",
-            party.label, hotel.get("name"), stay.label, status, len(rows), len(offers),
-        )
-        result.offers.extend(offers)
-    return result
+    return fetch_web_source(cfg, "superhotel", stays, parties, fetcher, dump_all)

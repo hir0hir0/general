@@ -389,7 +389,7 @@ def test_schedule_picks_hourly_toyoko_and_daily_all(cfg):
     assert (t.hour, t.minute) == (8, 20) and src == "toyoko"
     # 11:59 → 12:00 の全ソース
     t, src, _ci, _pt = monitor.next_run_time(cfg, _dt.datetime(2026, 10, 1, 11, 59, tzinfo=jst))
-    assert (t.hour, t.minute) == (12, 0) and src == "rakuten,toyoko,superhotel"
+    assert (t.hour, t.minute) == (12, 0) and src == ",".join(monitor.ALL_SOURCES)
 
 
 def test_schedule_watch_window_polls_every_30s(cfg):

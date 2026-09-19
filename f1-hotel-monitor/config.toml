@@ -257,6 +257,44 @@ tier = 1
 access = "鈴鹿"
 
 # ---------------------------------------------------------------------------
+# じゃらん（Playwright）。スーパーホテルは公式のほか楽天・じゃらん等でも売る。
+# 公式の会員限定プランとは別枠なので、公式が満でも OTA に残ることがある。
+#
+# 有効にする手順:
+#   1. じゃらんでスーパーホテル鈴鹿のページを開き、URL の yad 番号を控える
+#   2. python monitor.py jalan-dump --url "<プラン一覧の URL>"
+#      → data/jalan_sample.html が保存される
+#   3. その HTML を見て plan_selectors / name_selectors / price_selectors を埋める
+# url_template が TODO のうち、または plan_selectors が空のうちは
+# このソースは黙ってスキップされる（run には影響しない）。
+# ---------------------------------------------------------------------------
+[jalan]
+url_template = "TODO https://www.jalan.net/yad{code}/plan/?stayYear={ci_y}&stayMonth={ci_m}&stayDay={ci_d}&stayCount={nights}&roomCount={rooms}&adultNum={adults}"
+date_format = "%Y-%m-%d"
+timeout_sec = 60
+headless = true
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+locale = "ja-JP"
+request_interval_sec = 3.0
+max_adults_per_room = 4
+wait_for_text = "プラン"
+# じゃらんの価格表示は「滞在合計・1室あたり」なので per_night ではなく total
+price_basis = "total"
+plan_selectors = []
+name_selectors = []
+price_selectors = []
+soldout_class_keywords = []
+price_from_selector_only = true
+soldout_keywords = ["満室", "空室なし", "受付期間外", "予約できません"]
+
+# [[jalan.hotels]]
+# code = "TODO_yad番号"
+# name = "スーパーホテル鈴鹿"
+# area_label = "鈴鹿"
+# tier = 1
+# access = "鈴鹿"
+
+# ---------------------------------------------------------------------------
 # 自動予約。開放と同時に取りに行く
 # ---------------------------------------------------------------------------
 [booking]
