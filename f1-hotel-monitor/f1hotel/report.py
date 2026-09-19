@@ -75,6 +75,32 @@ def offers_table(offers: Iterable[Offer], cfg: Config, max_plan: int = 34) -> st
     return render_table(rows, headers, right_cols={8, 9})
 
 
+def links_list(offers: Iterable[Offer], cfg: Config, limit: int = 40) -> str:
+    """宿ごとのリンク一覧。
+
+    URL は必ず API が返した値をそのまま出す。こちらで URL を組み立てると、
+    形式を間違えたときに気づけないため（楽天のサイトへは監視側から到達できない）。
+    """
+    scored = [(o, score_offer(o, cfg.scoring, cfg.threshold_for(o))) for o in offers]
+    scored.sort(key=lambda t: sort_key(*t))
+    seen: set[str] = set()
+    out: list[str] = []
+    for o, s in scored:
+        key = f"{o.source}:{o.hotel_id}"
+        if key in seen:
+            continue
+        seen.add(key)
+        hotel_url = str(o.extra.get("hotel_url") or "")
+        out.append(f"{s.priority} 圏{o.tier} {o.hotel_name}  (宿番号 {o.hotel_id})")
+        out.append(f"  プラン: {o.url}")
+        if hotel_url and hotel_url != o.url:
+            out.append(f"  宿ページ: {hotel_url}")
+        if len(seen) >= limit:
+            out.append(f"... 他 {len(scored) - len(seen)} 件")
+            break
+    return "\n".join(out) if out else "(空室なし)"
+
+
 def summary_line(offers: list[Offer]) -> str:
     by_src: dict[str, int] = {}
     by_party: dict[str, int] = {}

@@ -148,3 +148,15 @@ def test_parking_bonus_for_car_trip(cfg):
     assert "駐車場あり" not in b and "駐車場無料" not in b
     未知 = mk("4")
     assert not [x for x in score_offer(未知, cfg.scoring, cfg.threshold_for(未知)).bonuses if "駐車場" in x]
+
+
+def test_links_list_uses_api_urls_verbatim(cfg):
+    from f1hotel.report import links_list
+
+    o = mk("1", url="https://api.example/reserve?x=1", extra={"hotel_url": "https://api.example/hotel"})
+    out = links_list([o], cfg)
+    assert "https://api.example/reserve?x=1" in out
+    assert "https://api.example/hotel" in out
+    assert "宿番号 1" in out
+    # 同じ宿は 1 回だけ
+    assert links_list([o, mk("1", checkin="2027-04-08")], cfg).count("宿番号 1") == 1

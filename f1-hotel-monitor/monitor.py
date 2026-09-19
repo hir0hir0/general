@@ -42,7 +42,7 @@ from f1hotel.rakuten import (
     load_area_tree,
     resolve_targets,
 )
-from f1hotel.report import offers_table, summary_line
+from f1hotel.report import links_list, offers_table, summary_line
 from f1hotel.state import append_history, compute_diff, load_state, merge_for_save, save_state
 from f1hotel.toyoko import discover_codes, fetch_toyoko
 from f1hotel.websource import fetch_web_source
@@ -164,6 +164,9 @@ def cmd_run(args: argparse.Namespace, cfg: Config) -> int:
         print("\n# errors")
         for e in errors:
             print(f"- {e}")
+    if getattr(args, "links", False):
+        print("\n# リンク（URL は楽天 API が返した値そのまま）")
+        print(links_list(offers, cfg))
     if args.json:
         Path(args.json).write_text(json.dumps([o.to_dict() for o in offers], ensure_ascii=False, indent=1), encoding="utf-8")
 
@@ -385,7 +388,7 @@ def cmd_schedule(args: argparse.Namespace, cfg: Config) -> int:
     log.info("scheduler start: daily=%s dense=%s", cfg.daily_times, [(a.isoformat(), b.isoformat()) for a, b in cfg.dense_windows])
     run_args = argparse.Namespace(
         sources=args.sources, notify=True, no_save=False, only_if_dense=False,
-        dry_run_notify=False, json=None, checkins=[], parties=[],
+        dry_run_notify=False, json=None, checkins=[], parties=[], links=False,
     )
     if args.run_now:
         cmd_run(run_args, cfg)
@@ -414,6 +417,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     r = sub.add_parser("run", help="取得・表出力・差分保存")
     r.add_argument("--sources", default=",".join(ALL_SOURCES), help="rakuten,toyoko")
+    r.add_argument("--links", action="store_true", help="宿ごとの予約 URL も出す")
     r.add_argument("--notify", action="store_true", help="差分があれば通知する")
     r.add_argument("--no-save", action="store_true", help="状態を保存せず表示のみ")
     r.add_argument("--only-if-dense", action="store_true", help="密度アップ期間のみ実行")
