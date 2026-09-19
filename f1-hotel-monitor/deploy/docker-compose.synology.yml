@@ -1,0 +1,45 @@
+# Synology Container Manager「プロジェクト」用（SSH 不要・ブラウザだけで導入）
+#
+# 1. DSM > Container Manager > プロジェクト > 作成
+#    - プロジェクト名: f1-hotel-monitor
+#    - パス: /docker/f1-hotel-monitor（新規フォルダを作る）
+#    - ソース: 「docker-compose.yml を作成」を選び、このファイルの内容を貼り付ける
+# 2. 下の environment の RAKUTEN_APP_ID / NTFY_TOPIC を自分の値に書き換えて「次へ」→「完了」
+# 3. 起動後、同じ画面の「コンテナ」>「f1-hotel-monitor」> ログ で動作確認
+#    初回起動時に /docker/f1-hotel-monitor/data/config.toml が作られる。
+#    エリアや閾値を変えたいときは File Station で開いて編集（次回実行時に反映）
+#
+# コードはコンテナ起動時に GitHub から取得するので、更新はコンテナ再起動だけでよい。
+services:
+  monitor:
+    image: mcr.microsoft.com/playwright/python:v1.63.0-noble
+    container_name: f1-hotel-monitor
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Tokyo
+      PYTHONUNBUFFERED: "1"
+      F1HOTEL_DATA_DIR: /data
+      # ---- 取得するブランチ（main にマージ後は main にする）----
+      F1HOTEL_BRANCH: claude/quirky-ride-2rg4ew
+      # ---- ここから自分の値に書き換える ----
+      RAKUTEN_APP_ID: ""
+      RAKUTEN_ACCESS_KEY: ""
+      # 楽天アプリ登録の Allowed websites に入れたドメインの URL
+      RAKUTEN_REFERER: https://github.com/hir0hir0/general
+      NOTIFY_CHANNELS: ntfy
+      NTFY_SERVER: https://ntfy.sh
+      NTFY_TOPIC: ""
+      NTFY_ERROR_TOPIC: ""
+      # LINE / Gmail を使う場合のみ
+      LINE_CHANNEL_ACCESS_TOKEN: ""
+      LINE_USER_ID: ""
+      GMAIL_USER: ""
+      GMAIL_APP_PASSWORD: ""
+      GMAIL_TO: ""
+    volumes:
+      - ./data:/data
+    working_dir: /app
+    command:
+      - python
+      - -c
+      - import os,urllib.request as u;exec(u.urlopen('https://raw.githubusercontent.com/hir0hir0/general/'+os.environ.get('F1HOTEL_BRANCH','main')+'/f1-hotel-monitor/deploy/boot.py').read())
