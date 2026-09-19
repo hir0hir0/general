@@ -114,6 +114,14 @@ timeout_sec = 20
 # 実際の名称は `python monitor.py areas --middle mie` で確認して調整する。
 # detail_keywords を指定すると、一致した detailClass ごとに検索して tier を細かく分ける。
 # detail が一致しない場合は small 全体で検索する。
+# 圏は「レース日にサーキットへたどり着きやすい順」。車で行く前提で組んでいる。
+#
+# 鈴鹿サーキットへ向かう車はほぼ全部が名古屋側（東名阪 四日市IC〜鈴鹿IC）から来る。
+# 名古屋に泊まるとその本流に自分から突っ込む形になるので、距離のわりに時間が読めない。
+# 伊勢道を北上する南側（津・松阪・伊勢）は渋滞と逆向きなので、遠くても所要時間は安定する。
+# さらに南側は伊勢鉄道で「鈴鹿サーキット稲生駅」に直接入れる＝白子のシャトル行列を回避できる。
+# そのため名古屋は「快適だが当日の移動が読めない」枠として圏4 に下げてある。
+
 [[rakuten.areas]]
 tier = 1
 label = "鈴鹿・四日市"
@@ -121,6 +129,7 @@ middle = "mie"
 small_keywords = ["鈴鹿", "四日市"]
 detail_keywords = ["鈴鹿", "白子", "四日市"]
 
+# 伊勢鉄道で稲生駅まで直通。車を宿に置いて電車で入れるので本命
 [[rakuten.areas]]
 tier = 1
 label = "津"
@@ -128,47 +137,67 @@ middle = "mie"
 small_keywords = ["津"]
 detail_keywords = ["津"]
 
+# 伊勢道で鈴鹿IC まで 40〜50分、渋滞と逆向き
 [[rakuten.areas]]
-tier = 2
-label = "桑名・湯の山・亀山"
+tier = 1
+label = "松阪"
 middle = "mie"
-small_keywords = ["桑名", "湯の山", "亀山"]
-detail_keywords = ["桑名", "長島", "湯の山", "菰野", "亀山"]
+small_keywords = ["松阪"]
+detail_keywords = ["松阪"]
 
+# 名阪国道→亀山→東名阪。関宿・亀山は無料道路で入れる
 [[rakuten.areas]]
 tier = 2
-label = "松阪・伊勢"
+label = "亀山・関・湯の山"
 middle = "mie"
-small_keywords = ["松阪", "伊勢"]
-detail_keywords = ["松阪", "伊勢"]
+small_keywords = ["亀山", "湯の山"]
+detail_keywords = ["亀山", "関", "湯の山", "菰野"]
+
+# 伊勢道の南端。鈴鹿まで 70km/約70分だが道は空いている
+[[rakuten.areas]]
+tier = 2
+label = "伊勢・二見"
+middle = "mie"
+small_keywords = ["伊勢"]
+detail_keywords = ["伊勢", "二見"]
 
 [[rakuten.areas]]
 tier = 3
+label = "鳥羽・志摩"
+middle = "mie"
+small_keywords = ["鳥羽", "志摩"]
+
+# 名阪国道沿い。無料で走れるが山道区間が長い
+[[rakuten.areas]]
+tier = 3
+label = "名張・伊賀"
+middle = "mie"
+small_keywords = ["伊賀", "名張"]
+detail_keywords = ["伊賀", "名張"]
+
+# 桑名・長島は名古屋側。東名阪の渋滞区間に入るので南側より後回し
+[[rakuten.areas]]
+tier = 3
+label = "桑名・長島"
+middle = "mie"
+small_keywords = ["桑名"]
+detail_keywords = ["桑名", "長島"]
+
+# 以下は名古屋側＝渋滞の本流と同じ向きから入ることになる。
+# 施設の快適さ（食事・買い物・バリアフリー）では有利なので候補には残すが、
+# 当日の移動時間が読めないぶん優先度は下げる。
+[[rakuten.areas]]
+tier = 4
 label = "名古屋"
 middle = "aichi"
 small_keywords = ["名古屋"]
 detail_keywords = ["名古屋駅", "金山", "栄", "伏見"]
 
-# 以下は「車で行く」場合にだけ意味があるエリア。電車だと乗り換えが多くて実用的でない。
-# 伊勢湾岸道・東名阪を使うと名古屋市街の渋滞を通らずにサーキット方面へ抜けられる。
-[[rakuten.areas]]
-tier = 2
-label = "知多・常滑（車）"
-middle = "aichi"
-small_keywords = ["知多", "常滑", "半田", "空港"]
-
-[[rakuten.areas]]
-tier = 3
-label = "刈谷・安城・岡崎（車）"
-middle = "aichi"
-small_keywords = ["刈谷", "安城", "岡崎", "豊田"]
-
 [[rakuten.areas]]
 tier = 4
-label = "名張・伊賀"
-middle = "mie"
-small_keywords = ["伊賀", "名張"]
-detail_keywords = ["伊賀", "名張"]
+label = "知多・常滑"
+middle = "aichi"
+small_keywords = ["知多", "常滑", "半田", "空港"]
 
 [[rakuten.areas]]
 tier = 4
