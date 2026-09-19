@@ -127,72 +127,29 @@ timeout_sec = 20
 # 桑名・長島は距離では津と同じだが土日は本流側に入る。ナガシマスパーランドがあるぶん
 # レースのない日を作れるので圏2。名古屋と伊勢は「距離が多いか向きが悪いか」の違いで同格。
 
-[[rakuten.areas]]
-tier = 1
-label = "鈴鹿・四日市"
-middle = "mie"
-small_keywords = ["鈴鹿", "四日市"]
-detail_keywords = ["鈴鹿", "白子", "四日市"]
+# 楽天のエリア区分は思ったより粗い。実際に返ってくる smallClass は次のとおりで、
+# 鈴鹿・亀山は「津」に、桑名・長島・湯の山は「四日市」に含まれている。
+# こちらで細かく分けて書いても同じ smallClass に吸収されるだけなので、
+# 楽天の区分 1 つにつきエントリ 1 つで書く（`monitor.py areas --middle mie` で確認できる）。
 
-# 伊勢鉄道で稲生駅まで直通。車を宿に置いて電車で入れるので本命
 [[rakuten.areas]]
 tier = 1
-label = "津"
+label = "津・鈴鹿・亀山"
 middle = "mie"
 small_keywords = ["津"]
-detail_keywords = ["津"]
 
-# 伊勢道で鈴鹿IC まで 40〜50分、土日の渋滞と逆向き
+[[rakuten.areas]]
+tier = 1
+label = "四日市・桑名・湯の山・長島"
+middle = "mie"
+small_keywords = ["四日市", "湯の山"]
+
 [[rakuten.areas]]
 tier = 2
 label = "松阪"
 middle = "mie"
 small_keywords = ["松阪"]
-detail_keywords = ["松阪"]
 
-# 名阪国道→亀山→東名阪。関宿・亀山は無料道路で入れる
-[[rakuten.areas]]
-tier = 2
-label = "亀山・関・湯の山"
-middle = "mie"
-small_keywords = ["亀山", "湯の山"]
-detail_keywords = ["亀山", "関", "湯の山", "菰野"]
-
-# 土日の渋滞とは逆向きだが 70km あり、5 往復ぶんでは名古屋と大差ない。
-# 電車で会場へ入るのは不便（伊勢市→白子が近鉄で 1時間20分）ので車前提になる
-[[rakuten.areas]]
-tier = 3
-label = "伊勢・二見"
-middle = "mie"
-small_keywords = ["伊勢"]
-detail_keywords = ["伊勢", "二見"]
-
-[[rakuten.areas]]
-tier = 4
-label = "鳥羽・志摩"
-middle = "mie"
-small_keywords = ["鳥羽", "志摩"]
-
-# 東から来ると完全に遠回り（亀山を過ぎて西進）。関西発なら話は別
-[[rakuten.areas]]
-tier = 4
-label = "名張・伊賀"
-middle = "mie"
-small_keywords = ["伊賀", "名張"]
-detail_keywords = ["伊賀", "名張"]
-
-# サーキットまで30分、月曜の帰路は全パターン最短（伊勢湾岸道 湾岸長島IC）。
-# ナガシマスパーランド／なばなの里があるので、レースのない日を作れる。
-# 土日は東名阪の渋滞区間に入るのが唯一の弱点
-[[rakuten.areas]]
-tier = 2
-label = "桑名・長島"
-middle = "mie"
-small_keywords = ["桑名"]
-detail_keywords = ["桑名", "長島"]
-
-# 名古屋側＝渋滞の本流と同じ向きだが、豊洲から近く、近鉄名古屋から白子へ直通。
-# 食事・買い物・バリアフリーも効くので、子連れ＋祖父母の保険としては実用的。
 [[rakuten.areas]]
 tier = 3
 label = "名古屋"
@@ -200,18 +157,39 @@ middle = "aichi"
 small_keywords = ["名古屋"]
 detail_keywords = ["名古屋駅", "金山", "栄", "伏見"]
 
+# セントレア・東海・半田・知多。伊勢湾岸道で鈴鹿まで約70km。
+# 「知多」を入れると南知多（半島の先・鈴鹿まで100km超）まで拾ってしまうので入れない
 [[rakuten.areas]]
 tier = 3
 label = "知多・常滑"
 middle = "aichi"
-small_keywords = ["知多", "常滑", "半田", "空港"]
+small_keywords = ["半田"]
+
+[[rakuten.areas]]
+tier = 3
+label = "伊勢・二見"
+middle = "mie"
+small_keywords = ["伊勢"]
+
+# 以下は鈴鹿から 100km 前後。安い宿は多いが通知には出さない（[notify.filter] max_tier）
+[[rakuten.areas]]
+tier = 4
+label = "鳥羽・志摩"
+middle = "mie"
+small_keywords = ["鳥羽", "志摩"]
 
 [[rakuten.areas]]
 tier = 4
+label = "名張・伊賀"
+middle = "mie"
+small_keywords = ["伊賀", "名張"]
+
+# 楽天のコードは gifu ではなく gihu
+[[rakuten.areas]]
+tier = 4
 label = "岐阜"
-middle = "gifu"
+middle = "gihu"
 small_keywords = ["岐阜"]
-detail_keywords = ["岐阜駅", "岐阜市"]
 
 # ---------------------------------------------------------------------------
 # 東横INN（Playwright）
@@ -273,6 +251,7 @@ url_templates = [
 parties = ["4人1室", "4人2室"]   # 4名。空にすると全部
 nights = [3]                      # 3泊のみ。空にすると全部
 max_total_price = 110000          # 滞在合計（全室分）
+max_tier = 3                      # 圏4（鳥羽・志摩／伊賀／岐阜）は遠すぎるので通知しない
 # 料金が読めなかったプランも通知するか。楽天が初日分しか返さないと ≈ 付きの概算になる
 include_unknown_price = false
 

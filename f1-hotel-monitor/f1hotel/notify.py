@@ -73,6 +73,9 @@ def _wanted(o: Offer, f: dict[str, Any]) -> bool:
     nights = [int(x) for x in f.get("nights", [])]
     if nights and o.nights not in nights:
         return False
+    max_tier = f.get("max_tier")
+    if max_tier is not None and o.tier > int(max_tier):
+        return False
     cap = f.get("max_total_price")
     if cap is not None:
         if o.total_price is None:
