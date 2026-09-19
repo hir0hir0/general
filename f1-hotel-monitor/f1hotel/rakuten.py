@@ -232,6 +232,7 @@ class SearchTarget:
     small: str
     detail: str | None = None
     name: str = ""
+    hotel_no: str = ""  # 名指しで見る宿。エリアではなく hotelNo で検索する
 
     @property
     def area_key(self) -> tuple[str, str, str | None]:
@@ -288,15 +289,19 @@ def build_vacant_params(cfg: Config, stay: Stay, target: SearchTarget, page: int
         "checkoutDate": stay.checkout.isoformat(),
         "adultNum": party.adults,
         "roomNum": party.rooms,
-        "largeClassCode": "japan",
-        "middleClassCode": target.middle,
-        "smallClassCode": target.small,
         "responseType": "large",
         "datumType": 1,
         "hits": int(cfg.rakuten.get("hits", 30)),
         "page": page,
         "sort": "+roomCharge",
     }
+    if target.hotel_no:
+        # 名指しの宿はエリア指定と併用できない。満室なら 404 not_found が返る
+        p["hotelNo"] = target.hotel_no
+        return p
+    p["largeClassCode"] = "japan"
+    p["middleClassCode"] = target.middle
+    p["smallClassCode"] = target.small
     if target.detail:
         p["detailClassCode"] = target.detail
     if party.infants_no_meal_no_bed:
@@ -404,6 +409,28 @@ def save_sample(data: dict[str, Any], path: Path, max_hotels: int = 2) -> None:
         path.write_text(json.dumps(sample, ensure_ascii=False, indent=1), encoding="utf-8")
     except (OSError, TypeError) as e:
         log.warning("サンプル保存に失敗: %s", e)
+
+
+def watch_hotel_targets(cfg: Config) -> list[SearchTarget]:
+    """config の [[rakuten.watch_hotels]] を、hotelNo で引く検索対象にする。
+
+    エリア検索は「空室のある宿」しか返さないので、名指しで押さえたい宿は
+    そこに現れない。満室のあいだは 404 not_found（＝該当なし）が返るだけなので、
+    空きが出た瞬間に拾える。
+    """
+    out: list[SearchTarget] = []
+    for h in cfg.rakuten.get("watch_hotels", []):
+        no = str(h.get("hotel_no", "")).strip()
+        if not no:
+            continue
+        out.append(SearchTarget(
+            tier=int(h.get("tier", 1)),
+            label=str(h.get("label", "名指し")),
+            middle="", small="",
+            name=str(h.get("name", no)),
+            hotel_no=no,
+        ))
+    return out
 
 
 def fetch_rakuten(

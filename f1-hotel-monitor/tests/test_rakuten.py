@@ -432,3 +432,27 @@ def test_schedule_merges_overlapping_windows(cfg):
     assert (t.minute, t.second) == (5, 0)
     assert set(src.split(",")) == {"rakuten", "superhotel"}
     assert ci == ["2027-04-09"] and pt == ["親子2人1室", "4人2室"]
+
+
+def test_watch_hotel_targets_query_by_hotel_no(cfg):
+    from f1hotel.rakuten import build_vacant_params, watch_hotel_targets
+
+    cfg.raw["rakuten"]["watch_hotels"] = [
+        {"hotel_no": "53098", "name": "近畿荘", "label": "津", "tier": 1},
+        {"name": "宿番号なしは無視"},
+    ]
+    ts = watch_hotel_targets(cfg)
+    assert [(t.hotel_no, t.tier, t.name) for t in ts] == [("53098", 1, "近畿荘")]
+
+    p = build_vacant_params(cfg, cfg.stays[0], ts[0], 1, cfg.parties[0])
+    assert p["hotelNo"] == "53098"
+    # エリア指定と併用できないので、エリアのキーは入れない
+    assert not {"largeClassCode", "middleClassCode", "smallClassCode", "detailClassCode"} & set(p)
+    assert p["checkinDate"] == cfg.stays[0].checkin.isoformat()
+
+    # 通常のエリア検索は今までどおり
+    area = [t for t in ts if False] or None
+    from f1hotel.rakuten import SearchTarget
+
+    ap = build_vacant_params(cfg, cfg.stays[0], SearchTarget(1, "x", "mie", "tsu"), 1, cfg.parties[0])
+    assert ap["smallClassCode"] == "tsu" and "hotelNo" not in ap

@@ -41,6 +41,7 @@ from f1hotel.rakuten import (
     fetch_rakuten,
     load_area_tree,
     resolve_targets,
+    watch_hotel_targets,
 )
 from f1hotel.report import links_list, offers_table, summary_line
 from f1hotel.state import append_history, compute_diff, load_state, merge_for_save, save_state
@@ -80,6 +81,11 @@ def collect(cfg: Config, sources: list[str]) -> list[SourceResult]:
             targets, warns = resolve_targets(tree, cfg.rakuten_areas)
             for w in warns:
                 log.warning("rakuten area: %s", w)
+            # 名指しの宿はエリア検索に出てこない（満室だと返らない）ので別枠で足す
+            watched = watch_hotel_targets(cfg)
+            for t in watched:
+                log.info("  watch  tier%d %s (hotelNo=%s)", t.tier, t.name, t.hotel_no)
+            targets = targets + watched
             if not targets:
                 msg = "検索対象エリアが 0 件。" + describe_tree(tree)
                 if not tree:
