@@ -147,3 +147,21 @@ def test_reminders(cfg):
     assert [r["message"] for r in due] == ["m1"]
     mark_reminder_sent(cfg.data_dir, due[0])
     assert due_reminders(cfg, cfg.data_dir, day) == []
+
+
+def test_never_sends_an_empty_body(cfg, monkeypatch):
+    """ntfy は本文なしの POST を「Triggered」とだけ表示するので、送ってはいけない。"""
+    monkeypatch.setenv("NTFY_TOPIC", "t")
+    s = Sess()
+    n = Notifier(channels=["ntfy"], session=s)
+    assert n.send("題だけ", "") == [] and s.posts == []
+    assert n.send("空白だけ", "   \n ") == [] and s.posts == []
+    assert n.send("中身あり", "本文") == [] and len(s.posts) == 1
+
+
+def test_filtered_out_diff_produces_no_message(cfg):
+    """差分はあるが通知条件に合わない → 本文は空。cmd_run 側はこれを送らない。"""
+    cfg.raw["notify"] = {"filter": {"parties": ["4人1室"], "nights": [3]}}
+    d = Diff(new=[mk(1, 30000)])          # 既定の mk は 親子2人1室・2泊
+    title, body, click = build_diff_message(d, cfg)
+    assert (title, body, click) == ("", "", None)

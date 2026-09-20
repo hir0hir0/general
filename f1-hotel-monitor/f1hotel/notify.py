@@ -154,6 +154,10 @@ class Notifier:
 
     def send(self, title: str, body: str, *, error: bool = False, click: str | None = None, priority: int = 3) -> list[str]:
         """全チャネルに送る。失敗したチャネルのエラー文字列を返す。"""
+        if not body.strip():
+            # ntfy は本文が空の POST を「Triggered」とだけ表示する。送らない
+            log.info("本文が空のため通知しない (title=%r)", title)
+            return []
         if not self.channels:
             log.warning("NOTIFY_CHANNELS 未設定: 通知をスキップ（stdout に出力）\n%s\n%s", title, body)
             return []

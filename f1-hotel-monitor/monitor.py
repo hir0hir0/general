@@ -187,10 +187,15 @@ def cmd_run(args: argparse.Namespace, cfg: Config) -> int:
         print(f"\n# diff: new={len(diff.new)} price={len(diff.price_changed)} gone={len(diff.gone)} unchanged={diff.unchanged}")
         if prev and not diff.empty:
             title, body, click = build_diff_message(diff, cfg)
-            print(body)
-            if args.notify:
-                fails = notifier.send(title, body, click=click, priority=4 if diff.new else 3)
-                errors.extend(f"notify {f}" for f in fails)
+            if body:
+                print(body)
+                if args.notify:
+                    fails = notifier.send(title, body, click=click, priority=4 if diff.new else 3)
+                    errors.extend(f"notify {f}" for f in fails)
+            else:
+                # 差分はあるが [notify.filter] で全部落ちた。送ると ntfy が
+                # 本文なしの「Triggered」を表示してしまうので送らない
+                print("(差分はあるが通知条件に合うものが無いので送信しない)")
         elif not prev:
             print("(初回実行: 基準となる状態を保存。通知はしない)")
         append_history(cfg.data_dir, diff)
