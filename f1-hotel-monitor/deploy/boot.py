@@ -37,12 +37,20 @@ def run(cmd, check=True, **kw):
 # 1. コード取得
 log(f"fetching branch {BRANCH}")
 url = f"https://github.com/hir0hir0/general/archive/refs/heads/{BRANCH}.tar.gz"
-data = urllib.request.urlopen(url, timeout=60).read()
+resp = urllib.request.urlopen(url, timeout=60)
+data = resp.read()
+# どの版が動いているか後から分かるように、tarball の ETag（コミット SHA）を控える
+version = (resp.headers.get("ETag") or "").strip('W/"') or "unknown"
 shutil.rmtree("/src", ignore_errors=True)
 tarfile.open(fileobj=io.BytesIO(data)).extractall("/src")
 root = next(p for p in os.listdir("/src"))
 shutil.rmtree(APP, ignore_errors=True)
 shutil.copytree(f"/src/{root}/f1-hotel-monitor", APP)
+try:
+    open(os.path.join(APP, ".version"), "w").write(version)
+except OSError:
+    pass
+log(f"code version {version[:12]}")
 
 # 2. 依存
 run([sys.executable, "-m", "pip", "install", "-q", "--root-user-action=ignore", "-r", f"{APP}/requirements.txt"])

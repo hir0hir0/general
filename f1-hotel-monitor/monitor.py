@@ -60,6 +60,14 @@ def now_jst() -> dt.datetime:
     return dt.datetime.now(JST)
 
 
+def code_version() -> str:
+    """boot.py が書いたコミット SHA。どの版が動いているかログで分かるようにする。"""
+    try:
+        return (Path(__file__).with_name(".version").read_text(encoding="utf-8").strip() or "?")[:12]
+    except OSError:
+        return "dev"
+
+
 # ---------------------------------------------------------------------------
 # run
 # ---------------------------------------------------------------------------
@@ -163,7 +171,8 @@ def cmd_run(args: argparse.Namespace, cfg: Config) -> int:
     sources_ok = {r.source for r in results if r.ok}
 
     # --- 表出力 ---------------------------------------------------------
-    print(f"# {now_jst():%Y-%m-%d %H:%M} JST  stays={[s.label for s in cfg.stays]}  sources={sources}")
+    print(f"# {now_jst():%Y-%m-%d %H:%M} JST  stays={[s.label for s in cfg.stays]}  sources={sources}"
+          f"  code={code_version()}")
     print(summary_line(offers))
     print(offers_table(offers, cfg))
     if errors:
