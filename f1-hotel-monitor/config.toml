@@ -1,0 +1,437 @@
+# 2027 F1日本GP 宿監視 設定
+# 秘密情報（APIキー・トークン）は .env に置く。ここには置かない。
+
+[stay]
+# 検索する日程。2027 F1日本GP は 4/9(金) 予選日〜4/11(日) 決勝。
+# 決勝翌日の月曜に帰る「金〜月」が本命。行を足せばそのまま検索対象が増える。
+[[stay.ranges]]
+checkin = "2027-04-09"    # 金
+checkout = "2027-04-12"   # 月（3泊）※本命
+
+[[stay.ranges]]
+checkin = "2027-04-09"    # 金
+checkout = "2027-04-11"   # 日（2泊）
+
+[[stay.ranges]]
+checkin = "2027-04-08"    # 木
+checkout = "2027-04-11"   # 日（3泊）
+
+[[stay.ranges]]
+checkin = "2027-04-10"    # 土
+checkout = "2027-04-12"   # 月（2泊）
+
+# 人数パターン。すべてのパターン × 日程 × エリアで検索し、通知は別々に出す。
+#   adults                 大人の人数（合計）
+#   infants_no_meal_no_bed 幼児・食事なし布団なし＝添い寝（楽天 infantWithoutMBNum）
+#   rooms                  部屋数
+#   instant_price_per_night 1泊（全室合計）が この額以下なら「即」。未指定なら [thresholds] の値
+[[stay.parties]]
+label = "親子2人1室"
+adults = 1
+infants_no_meal_no_bed = 1
+rooms = 1
+instant_price_per_night = 25000
+
+[[stay.parties]]
+label = "4人1室"          # 大人3（本人＋祖父母）＋4歳児1
+adults = 3
+infants_no_meal_no_bed = 1
+rooms = 1
+instant_price_per_night = 60000
+
+[[stay.parties]]
+label = "4人2室"          # 同じ4人を2部屋に分ける
+adults = 3
+infants_no_meal_no_bed = 1
+rooms = 2
+instant_price_per_night = 60000
+
+[thresholds]
+# 人数パターンで instant_price_per_night を指定しない場合の既定値（1泊あたり）
+instant_price_per_night = 25000
+
+[schedule]
+# 通常の実行時刻（JST）。`monitor.py schedule` と crontab の両方で使う
+# キャンセル拾いのため 1 日 4 回。深夜〜早朝はキャンセル反映が多い
+daily_times = ["07:00", "12:00", "18:00", "22:30"]
+# 毎時 :20 にこのソースだけ追加で見る（キャンセル拾い。空文字で無効）
+hourly_sources = "toyoko"
+# 開放直後期は 1 時間毎（JST）。[開始日, 終了日] の両端を含む
+dense_windows = [
+  ["2026-11-01", "2026-11-03"],   # スーパーホテル鈴鹿 開放
+  ["2027-01-13", "2027-01-22"],   # ルートイン 鈴鹿レース日 特別販売（2026年実績 1/15・1/20 14時）
+]
+# 指定日に 1 回だけ送るリマインド通知（開放日の見落とし防止）
+[[schedule.reminders]]
+date = "2026-10-31"
+message = "明日 11/1 スーパーホテル鈴鹿 が 2027/4 分を開放予定。手動でも確認。"
+[[schedule.reminders]]
+date = "2027-01-10"
+message = "ルートイン鈴鹿レース日 特別販売は例年 1月中旬 14時ネット限定。公式の告知を確認し、開放日に手動予約できる体制を。"
+
+# 開放の瞬間だけ超短間隔で張り込む。秒単位で埋まるため
+# スーパーホテルは「当月含む 6 か月先まで、毎月1日に開始。開始時刻は非公表」。
+# 2026/11/1 に 2027/4 分が開放される。時刻が読めないので終日 1 分間隔で張り込む。
+# 負荷を抑えるため、この間は本命日程・1 パターンだけを見る。
+[[schedule.watch_windows]]
+start = "2026-11-01T00:00"
+end = "2026-11-02T00:00"
+interval_seconds = 60
+sources = "superhotel"
+checkins = ["2027-04-09"]
+parties = ["親子2人1室"]
+
+# 同じ日、楽天側も 5 分間隔で張る。スーパーホテルは楽天・じゃらんでも売るため、
+# 公式より OTA が先に開くこともある。1 リクエスト/秒の制限内に収まる間隔にする
+[[schedule.watch_windows]]
+start = "2026-11-01T00:00"
+end = "2026-11-02T00:00"
+interval_seconds = 300
+sources = "rakuten"
+checkins = ["2027-04-09"]
+parties = ["親子2人1室", "4人2室"]
+
+# 12/1・1/1 も同様に張る（4月分の追加放出や他ホテルの開放に備える）
+[[schedule.watch_windows]]
+start = "2026-12-01T00:00"
+end = "2026-12-01T23:59"
+interval_seconds = 300
+sources = "superhotel"
+checkins = ["2027-04-09"]
+parties = ["親子2人1室"]
+
+# ---------------------------------------------------------------------------
+# 楽天トラベル VacantHotelSearch API
+# ---------------------------------------------------------------------------
+[rakuten]
+hits = 30            # 1 ページ最大 30
+max_pages = 5        # エリア×日程×人数あたりの最大ページ数
+request_interval_sec = 1.05   # レート制限 1req/sec
+timeout_sec = 20
+
+# エリア定義。small_keywords / detail_keywords は GetAreaClass API の
+# smallClassName / detailClassName に部分一致させる（コードのハードコード回避）。
+# 実際の名称は `python monitor.py areas --middle mie` で確認して調整する。
+# detail_keywords を指定すると、一致した detailClass ごとに検索して tier を細かく分ける。
+# detail が一致しない場合は small 全体で検索する。
+# 圏は「東京・豊洲から車で行き、金曜はまずサーキットに寄ってから宿に入る」前提の順位。
+#
+# 判断材料は 2 つだけ。往路（豊洲→鈴鹿 約400km）は宿がどこでも共通なので効かないし、
+# 月曜は帰るだけで時間の制約がないので、帰路の距離も順位には入れない。
+#  1. 宿⇄サーキットを 5 回走る（金の宿入り＋土往復＋日往復）。ここが最大の差
+#  2. 土日の渋滞の向き。名古屋側（東名阪 四日市IC〜鈴鹿IC）は渋滞の本流、
+#     南（伊勢道を北上）は逆向きなので同じ距離でも時間が読める
+#
+# 津が圏1 なのは 2 を満たすうえ、伊勢鉄道で「鈴鹿サーキット稲生駅」へ直通できるから。
+# 車を宿に置いたまま会場に入れる＝土日の出庫渋滞を丸ごと回避できる。
+# 桑名・長島は距離では津と同じだが土日は本流側に入る。ナガシマスパーランドがあるぶん
+# レースのない日を作れるので圏2。名古屋と伊勢は「距離が多いか向きが悪いか」の違いで同格。
+
+# 圏は「レース日にサーキットへ着ける確実さ」順。距離そのものではない。
+#
+# 南（伊勢道を北上）は渋滞の本流と逆向きなので、距離をそのまま所要時間として読める。
+# 名古屋側（東名阪 四日市IC〜鈴鹿IC）は本流なので、60km でも当日は倍以上かかりうる。
+# だから鳥羽（110km・南）と名古屋（60km・北）は実質的に同格に置いている。
+#
+# 楽天のエリア区分は粗く、鈴鹿・亀山は「津」に、桑名・長島・湯の山は「四日市」に含まれる。
+# こちらで細かく分けて書いても同じ smallClass に吸収されるので、
+# 楽天の区分 1 つにつきエントリ 1 つで書く（`monitor.py areas --middle mie` で確認できる）。
+
+# --- 圏1: 近い。渋滞に巻き込まれても取り返せる ---------------------------
+[[rakuten.areas]]
+tier = 1
+label = "四日市・桑名・湯の山・長島"   # 25km / 約35分
+middle = "mie"
+small_keywords = ["四日市", "湯の山"]
+
+# 伊勢鉄道で「鈴鹿サーキット稲生駅」へ直通できる＝車を宿に置いたまま会場に入れる
+[[rakuten.areas]]
+tier = 1
+label = "津・鈴鹿・亀山"               # 30km / 約40分
+middle = "mie"
+small_keywords = ["津"]
+
+# --- 圏2: 南の渋滞なしルート ＋ 電車に逃げられる名古屋 -------------------
+[[rakuten.areas]]
+tier = 2
+label = "松阪"                        # 50km / 約45分。伊勢道で渋滞と逆向き
+middle = "mie"
+small_keywords = ["松阪"]
+
+[[rakuten.areas]]
+tier = 2
+label = "伊勢・二見"                  # 70km / 約70分。南なので所要時間が読める
+middle = "mie"
+small_keywords = ["伊勢"]
+
+# 距離では圏1 級だが当日は渋滞の本流。ただし近鉄で白子直通なので車か電車か選べる
+[[rakuten.areas]]
+tier = 2
+label = "名古屋"                      # 60km / 約50分（渋滞時はもっと）
+middle = "aichi"
+small_keywords = ["名古屋"]
+detail_keywords = ["名古屋駅", "金山", "栄", "伏見"]
+
+# --- 圏3 -----------------------------------------------------------------
+# 遠いが南なので渋滞なし。安い民宿が多い
+[[rakuten.areas]]
+tier = 3
+label = "鳥羽・志摩"                  # 110km / 約100分
+middle = "mie"
+small_keywords = ["鳥羽", "志摩"]
+
+# セントレア・東海・半田・知多。伊勢湾岸道で約70km。
+# 「知多」を入れると南知多（半島の先。戻ってから渋滞側に合流するので実質もっと遠い）を拾う
+[[rakuten.areas]]
+tier = 3
+label = "知多・常滑"                  # 70km / 約60分
+middle = "aichi"
+small_keywords = ["半田"]
+
+[[rakuten.areas]]
+tier = 3
+label = "名張・伊賀"                  # 60km だが山道が長く約75分
+middle = "mie"
+small_keywords = ["伊賀", "名張"]
+
+# 検索しないエリアと、その理由:
+#   岐阜    名古屋より先へ遠ざかる方向。名古屋で足りる
+#           （楽天のコードは gifu ではなく gihu。復活させるときは間違えないこと）
+#   南知多  半島の先。北へ戻ってから渋滞側に合流するので、距離以上に時間が読めない
+
+# 名指しで見る宿。エリア検索は「空室のある宿」しか返さないので、
+# 満室・未発売の宿はそこに出てこない。hotelNo で直接引けば空いた瞬間に拾える。
+# 宿番号は楽天トラベルの宿ページ URL（/HOTEL/<番号>/）から取れる。
+[[rakuten.watch_hotels]]
+hotel_no = "53098"
+name = "ビジネス旅館 近畿荘"
+label = "津・鈴鹿・亀山"
+tier = 1
+# 三重県津市丸之内11-2 / 近鉄津新町駅 徒歩10分 / サーキットまで車で約30分
+# 6畳・10畳の和室、風呂トイレ共同。1泊5,200円〜
+
+# 検索しないエリアと、その理由:
+#   鳥羽・志摩  110km / 約100分。豊橋の保険とほぼ同じ距離なので見る意味がない
+#   岐阜        名古屋より先へ遠ざかる方向。名古屋で足りるので優先度が低い
+#               （楽天のコードは gifu ではなく gihu。復活させるときは間違えないこと）
+#   南知多      半島の先。鈴鹿まで100km超
+
+# ---------------------------------------------------------------------------
+# 東横INN（Playwright）
+# ---------------------------------------------------------------------------
+[toyoko]
+# 空室検索ページの URL テンプレート。{code} {ci} {co} {adults} {rooms} が展開される。
+# ※ 初回に `python monitor.py toyoko-dump` で実 URL・DOM を確認して調整する。
+url_template = "https://www.toyoko-inn.com/search/reserve/room?hotel={code}&chkin={ci}&chkout={co}&adult={adults}&room={rooms}"
+date_format = "%Y/%m/%d"
+timeout_sec = 60
+headless = true
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+locale = "ja-JP"
+# 取得間隔（サイト負荷配慮）
+request_interval_sec = 3.0
+# 1 室あたりの大人の上限。これを超える人数パターンは検索しない（東横INN は 2 名程度）
+max_adults_per_room = 2
+# プラン要素の候補セレクタ（上から順に試し、最初に要素が見つかったものを使う）
+plan_selectors = [".roomList .room", ".plan-list .plan", "li.room", "[class*=roomItem]", "[class*=plan]"]
+name_selectors = [".roomName", ".room-name", "h3", "h4", "[class*=name]"]
+price_selectors = [".price", "[class*=price]", "[class*=charge]"]
+soldout_keywords = ["満室", "空室なし", "ご予約いただけません", "×"]
+
+# 東横INN は小学生以下 1 名添い寝無料。人数パターンの adults / rooms が URL に展開される
+# code は公式サイトのホテルページ URL（/search/detail/<code>/ など）から控える
+# code は公式サイトの /search/detail/<code>/ から取得済み。
+# 未設定（"00000"）のホテルを足した場合は、起動時に候補を
+# data/toyoko_candidates.txt に書き出す
+[[toyoko.hotels]]
+code = "00273"          # https://www.toyoko-inn.com/search/detail/00273/
+name = "東横INN津駅西口"
+search_name = "津駅西口"
+area_label = "津"
+tier = 1
+
+[[toyoko.hotels]]
+code = "00267"          # https://www.toyoko-inn.com/search/detail/00267/
+name = "東横INN近鉄四日市駅北口"
+search_name = "四日市"
+area_label = "四日市"
+tier = 1
+
+# 検索用 URL テンプレート（{q} に search_name が入る）
+[toyoko.discover]
+url_templates = [
+  "https://www.toyoko-inn.com/search/result?keyword={q}",
+  "https://www.toyoko-inn.com/china/search/result?keyword={q}",
+  "https://www.toyoko-inn.com/hotel_list",
+]
+
+# ---------------------------------------------------------------------------
+# 子連れ加点（キーワード判定）
+# ---------------------------------------------------------------------------
+# 通知に出す条件。ntfy は本文 4096 バイトで頭打ちなので、絞らないと数件で切れる。
+# state には全件を残すので、ここで絞っても「新規」の判定はずれない
+# （条件を緩めれば、前から出ていた宿もその時点で新規として通知される）。
+# ログの表と data/state.json には引き続き全件入る。
+[notify.filter]
+parties = ["4人1室", "4人2室"]   # 4名。空にすると全部
+nights = [3]                      # 3泊のみ。空にすると全部
+max_total_price = 110000          # 滞在合計（全室分）
+max_tier = 3                      # 圏4（鳥羽・志摩／伊賀／岐阜）は遠すぎるので通知しない
+# 料金が読めなかったプランも通知するか。楽天が初日分しか返さないと ≈ 付きの概算になる
+include_unknown_price = false
+
+# 圏ごとの上限。書いた圏は max_total_price より優先される。
+# 圏1・圏2 は宿⇄サーキットが近く代えが効かないので、高くても見逃さないようにする
+[notify.filter.max_total_price_by_tier]
+1 = 150000
+2 = 150000
+
+# 標準出力（＝NAS のコンテナログ）に何を載せるか
+[report]
+# 宿ごとの予約 URL を表の後に出す。NAS では run を手で叩けないので既定で有効
+links = true
+links_limit = 20
+
+[scoring]
+walk_minutes_max = 5
+breakfast_start_max = "06:30"
+bath_keywords = ["大浴場", "温泉", "露天"]
+family_room_keywords = ["ファミリー", "和洋室", "和室", "コネクティング", "フォース", "4名", "４名", "トリプル", "ツイン"]
+# 車で行く場合の加点。楽天の parkingInformation は「あり」「無料」など短い文字列
+parking_free_keywords = ["無料駐車場", "駐車場無料", "駐車場込み", "駐車料金無料", "駐車場あり（無料）"]
+parking_none_keywords = ["なし", "無し", "ございません"]
+
+# ---------------------------------------------------------------------------
+# スーパーホテル（Playwright）。2027/4 分は 2026/11/1 開放見込み
+# ---------------------------------------------------------------------------
+[superhotel]
+# 予約エンジンは reservation.jp。日付は YYYYMMDD、施設コードは sh-<name>
+url_template = "https://go-superhotel.reservation.jp/ja/hotels/{code}/plans?checkin_date={ci}&checkout_date={co}&adults={adults}&child1={infants}&child2=0&child3=0&child4=0&child5=0&children={infants}&rooms={rooms}&dayuseFlg=0&sort=1&dateUndecidedFlg=0"
+date_format = "%Y%m%d"
+timeout_sec = 60
+headless = true
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+locale = "ja-JP"
+request_interval_sec = 2.0
+max_adults_per_room = 3
+# SPA なので描画待ちが要る。この文字列が出るまで待つ
+wait_for_text = "プラン"
+# 実 DOM（2026-09-18 に取得したページで確認）
+#   プランカード: li.c-listRoom-item（売り切れは c-listRoom-item-disabled が付く）
+#   プラン名:     h2.c-headingMain
+#   価格:         .c-textPrice-total / .c-textPrice
+plan_selectors = ["li.c-listRoom-item", ".c-listRoom-item", "[class*=listRoom-item]"]
+name_selectors = ["h2.c-headingMain", ".c-headingMain", "h2", "h3"]
+price_selectors = [".c-textPrice-total", ".c-textPrice", "[class*=textPrice]"]
+# 売り切れは class で判る。本文は長いので文字列頼みにしない
+soldout_class_keywords = ["disabled"]
+# 本文には「1,000pt」などがあるので、価格はセレクタからのみ読む
+price_from_selector_only = true
+soldout_keywords = ["空室なし", "満室", "予約できるプランがありません", "受付前", "販売前", "予約できません"]
+
+[[superhotel.hotels]]
+code = "sh-suzuka"
+name = "スーパーホテル鈴鹿"
+area_label = "鈴鹿"
+tier = 1
+access = "鈴鹿"
+
+# ---------------------------------------------------------------------------
+# じゃらん（Playwright）。スーパーホテルは公式のほか楽天・じゃらん等でも売る。
+# 公式の会員限定プランとは別枠なので、公式が満でも OTA に残ることがある。
+#
+# 有効にする手順:
+#   1. じゃらんでスーパーホテル鈴鹿のページを開き、URL の yad 番号を控える
+#   2. python monitor.py jalan-dump --url "<プラン一覧の URL>"
+#      → data/jalan_sample.html が保存される
+#   3. その HTML を見て plan_selectors / name_selectors / price_selectors を埋める
+# url_template が TODO のうち、または plan_selectors が空のうちは
+# このソースは黙ってスキップされる（run には影響しない）。
+# ---------------------------------------------------------------------------
+[jalan]
+url_template = "TODO https://www.jalan.net/yad{code}/plan/?stayYear={ci_y}&stayMonth={ci_m}&stayDay={ci_d}&stayCount={nights}&roomCount={rooms}&adultNum={adults}"
+date_format = "%Y-%m-%d"
+timeout_sec = 60
+headless = true
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+locale = "ja-JP"
+request_interval_sec = 3.0
+max_adults_per_room = 4
+wait_for_text = "プラン"
+# じゃらんの価格表示は「滞在合計・1室あたり」なので per_night ではなく total
+price_basis = "total"
+plan_selectors = []
+name_selectors = []
+price_selectors = []
+soldout_class_keywords = []
+price_from_selector_only = true
+soldout_keywords = ["満室", "空室なし", "受付期間外", "予約できません"]
+
+# [[jalan.hotels]]
+# code = "TODO_yad番号"
+# name = "スーパーホテル鈴鹿"
+# area_label = "鈴鹿"
+# tier = 1
+# access = "鈴鹿"
+
+# ---------------------------------------------------------------------------
+# 自動予約。開放と同時に取りに行く
+# ---------------------------------------------------------------------------
+[booking]
+enabled = false          # ← 準備が終わったら true に（加えて環境変数 F1HOTEL_BOOKING=1 が必要）
+dry_run = true           # ← true の間は確定ボタンを押さず手前で止まる
+sources = ["superhotel"] # 自動予約を許可するソース
+parties = ["4人2室", "親子2人1室"]   # このパターンのみ
+prefer_parties = ["4人2室", "親子2人1室"]
+max_total_price = 150000 # 合計がこれを超えたら実行しない（円）。前日まで無料なので押さえ優先
+timeout_sec = 15
+required_guest_fields = ["name", "kana", "phone", "email"]
+
+# 無料キャンセルを確認できるプランだけ予約する（確認できなければ実行しない）
+require_free_cancel = true
+# 規定を人が確認済みのソース。スーパーホテルは「当日・無連絡のみ 100%」＝前日まで無料
+# （2026-09-18 に予約画面のキャンセル料表示で確認）
+free_cancel_sources = ["superhotel"]
+no_cancel_keywords = ["返金不可", "キャンセル不可", "取消不可", "事前決済", "事前カード決済", "変更不可", "ノンリファンダブル"]
+free_cancel_keywords = ["前日まで無料", "キャンセル無料", "無料キャンセル", "当日まで無料", "現地決済", "現地払い"]
+
+# 予約する日程（未指定なら stay.ranges すべて）
+[[booking.stays]]
+checkin = "2027-04-09"
+checkout = "2027-04-12"
+
+# 予約フロー。実サイトを見てから selector を埋める（superhotel-dump のスクショ/HTML を使う）
+[[booking.flows.superhotel]]
+action = "goto"
+value = "{url}"
+[[booking.flows.superhotel]]
+action = "shot"
+value = "01_search"
+[[booking.flows.superhotel]]
+action = "click"
+selector = "TODO_予約ボタン"
+[[booking.flows.superhotel]]
+action = "fill"
+selector = "TODO_氏名"
+value = "{name}"
+[[booking.flows.superhotel]]
+action = "fill"
+selector = "TODO_カナ"
+value = "{kana}"
+[[booking.flows.superhotel]]
+action = "fill"
+selector = "TODO_電話"
+value = "{phone}"
+[[booking.flows.superhotel]]
+action = "fill"
+selector = "TODO_メール"
+value = "{email}"
+[[booking.flows.superhotel]]
+action = "shot"
+value = "02_form"
+[[booking.flows.superhotel]]
+action = "assert_text"
+value = "{checkin_slash}"
+[[booking.flows.superhotel]]
+action = "submit"
+selector = "TODO_予約を確定"

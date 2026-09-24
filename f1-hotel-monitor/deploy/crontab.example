@@ -1,0 +1,9 @@
+# NAS (Synology/QNAP など) の crontab 例。TZ は JST 前提。
+# パスは実環境に合わせて置き換える。
+#   crontab -e で追記するか、Synology は「コントロールパネル > タスクスケジューラ」に同じコマンドを登録。
+#
+# 通常: 7:00 / 12:00 / 18:00 / 22:30（キャンセル拾いのため 1 日 4 回）
+0 7,12,18 * * *  cd /volume1/docker/f1-hotel-monitor && ./run.sh run --notify >> data/cron.log 2>&1
+30 22 * * *  cd /volume1/docker/f1-hotel-monitor && ./run.sh run --notify >> data/cron.log 2>&1
+# 開放直後期（config.toml の dense_windows 内の日だけ実行される）: 毎時 5 分
+5 * * * *     cd /volume1/docker/f1-hotel-monitor && ./run.sh run --notify --only-if-dense >> data/cron.log 2>&1
